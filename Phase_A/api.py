@@ -207,7 +207,10 @@ def execute_approved():
     if proposal is None:
         return jsonify({"error": "Unknown proposal_id"}), 404
     if proposal.status != "PENDING_APPROVAL":
-        return jsonify({"status": proposal.status, "proposal_id": proposal_id}), 409
+        payload = {"status": proposal.status, "proposal_id": proposal_id}
+        if proposal.status == "EXECUTED":
+            payload["error"] = "Proposal already executed"
+        return jsonify(payload), 409
 
     approved = REGISTRY.sender.wait_for_trade_approval(proposal_id)
     if not approved:
