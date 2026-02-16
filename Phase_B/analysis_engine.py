@@ -56,10 +56,11 @@ class PhaseBAnalysisEngine:
 
         proposal_side, mode = self._select_paper_side(decision, estimate)
         proposal_entry = snapshot.yes_ask if proposal_side == "YES" else snapshot.no_ask
+        proposal_probability_yes = estimate.ensemble_yes if proposal_side == "YES" else (1 - estimate.ensemble_yes)
 
         risk_assessment = self.risk_gateway.assess_trade(
             bankroll_tracker=BankrollTracker(starting_bankroll=50.0),
-            probability_yes=estimate.ensemble_yes,
+            probability_yes=proposal_probability_yes,
             entry_price_cents=proposal_entry,
         )
 

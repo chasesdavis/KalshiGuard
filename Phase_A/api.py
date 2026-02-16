@@ -112,19 +112,17 @@ def paper_trade_sim(ticker: str):
         return jsonify({"error": str(exc), "demo_signup": "https://demo.kalshi.co/"}), 404
 
     snapshots = {s.ticker: s for s in fetch_price_snapshots()}
-    snap = snapshots.get(ticker)
-    if not snap:
-        return jsonify({"error": f"No baseline snapshot for ticker: {ticker}"}), 404
+    baseline = snapshots.get(ticker)
 
     sim_snapshot = PriceSnapshot(
-        ticker=snap.ticker,
-        timestamp=snap.timestamp,
+        ticker=ticker,
+        timestamp=baseline.timestamp if baseline else "demo_api",
         yes_ask=payload["yes_ask"],
         no_ask=payload["no_ask"],
         yes_bid=payload["yes_bid"],
         no_bid=payload["no_bid"],
-        volume=snap.volume,
-        open_interest=snap.open_interest,
+        volume=payload.get("volume", baseline.volume if baseline else 0),
+        open_interest=payload.get("open_interest", baseline.open_interest if baseline else 0),
     )
 
     analysis = analyze_snapshot_with_context(sim_snapshot)
