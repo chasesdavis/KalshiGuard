@@ -4,6 +4,7 @@ set -euo pipefail
 # Resolve merge conflicts for one or more feature branches by merging latest main.
 # Usage:
 #   ./scripts/resolve-pr-conflicts.sh <feature-branch|pr-url|pr-number> [...]
+#   ./scripts/resolve-pr-conflicts.sh --no-fetch <feature-branch> [...]
 #   ./scripts/resolve-pr-conflicts.sh
 #
 # Example (two remaining PR branches):
@@ -74,6 +75,13 @@ normalize_branch_ref() {
   echo "${ref}"
 }
 
+skip_fetch=false
+
+if [[ "${1:-}" == "--no-fetch" ]]; then
+  skip_fetch=true
+  shift
+fi
+
 if [[ "$#" -eq 0 ]]; then
   mapfile -t auto_branches < <(discover_unpushed_branches)
   if [[ "${#auto_branches[@]}" -eq 0 ]]; then
@@ -89,8 +97,16 @@ if ! git remote get-url origin >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "➡️ Fetching latest refs from origin..."
-git fetch origin --prune
+if [[ "${skip_fetch}" == true ]]; then
+  echo "⚠️ Skipping origin fetch/rebase as requested (--no-fetch)."
+else
+  echo "➡️ Fetching latest refs from origin..."
+  if ! git fetch origin --prune; then
+    echo "❌ Failed to fetch origin. Check network access, credentials, and proxy settings." >&2
+    echo "   If you already have the target branches locally, retry with --no-fetch." >&2
+    exit 3
+  fi
+fi
 
 normalized_branches=()
 for raw_ref in "$@"; do
@@ -103,14 +119,20 @@ for feature_branch in "${normalized_branches[@]}"; do
   git checkout "${feature_branch}"
 
   # Make sure local branch is up-to-date with remote tracking branch when available.
-  if git show-ref --verify --quiet "refs/remotes/origin/${feature_branch}"; then
+  if [[ "${skip_fetch}" == false ]] && git show-ref --verify --quiet "refs/remotes/origin/${feature_branch}"; then
     echo "➡️ Rebasing ${feature_branch} onto origin/${feature_branch}"
     git rebase "origin/${feature_branch}"
   fi
 
-  echo "➡️ Merging origin/main into ${feature_branch}"
+  if [[ "${skip_fetch}" == true ]]; then
+    merge_base="main"
+  else
+    merge_base="origin/main"
+  fi
+
+  echo "➡️ Merging ${merge_base} into ${feature_branch}"
   set +e
-  git merge origin/main
+  git merge "${merge_base}"
   merge_status=$?
   set -e
 
