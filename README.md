@@ -18,7 +18,7 @@ Codex Cloud integration reads `CODEX_API_KEY` from environment — no secrets in
 | `Phase_G/` | **iOS Companion App** — SwiftUI dashboard, WidgetKit, live PnL, glassmorphism UI | 🔜 Stub |
 | `Phase_H/` | **Deployment & Monitoring** — Production hardening, 24/7 ops, alerting, audit logs | 🔜 Stub |
 | `Shared/` | **Common utilities** — Models, config, Codex client, env loading | ✅ Scaffolded |
-| `scripts/` | **Helpers** — Setup, Flask launcher, dashboard check | ✅ Scaffolded |
+| `scripts/` | **Helpers** — Setup, Flask launcher, dashboard check, merge-conflict helper | ✅ Scaffolded |
 
 ## Quick Start
 
@@ -43,3 +43,13 @@ python Phase_A/api.py         # start read-only API on :5000 (Phase B analysis e
 2. **No live trades without iMessage approval** from whitelisted number.
 3. **No secrets in code.** Environment variables only.
 4. **Read-only first.** Each phase unlocks incrementally after validation.
+
+## Conflict Resolution Helper (PR sync)
+
+If a PR branch is behind `main` and GitHub shows merge conflicts, run:
+
+```bash
+./scripts/resolve-pr3-conflicts.sh <your-branch>
+```
+
+The script fetches `origin`, merges `origin/main` into your branch, runs tests, and pushes when conflict-free. If conflicts occur, it prints the exact next commands to finish manually.
