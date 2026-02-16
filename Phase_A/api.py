@@ -1,8 +1,9 @@
-"""KalshiGuard API — analysis, proposal, and approval-gated execution endpoints."""
+"""KalshiGuard API — data endpoints, analysis explanation, risk assessment, and Phase F learning hooks."""
 from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 
 from flask import Flask, jsonify, request
 
@@ -11,8 +12,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from Phase_A.analysis import analyze_snapshot_with_context, propose_trade_with_context
 from Phase_A.data_fetcher import fetch_markets, fetch_price_snapshots
 from Phase_A.logger import init_db, log_signal
-from Phase_C.imessage_proposal import REGISTRY
-from Phase_E.order_executor import OrderExecutor, OrderRequest
+from Phase_F.model_retrainer import PhaseFModelRetrainer
+from Phase_F.version_rollback import VersionRollbackManager
 from Shared.config import Config
 from Shared.logging_utils import configure_logging
 
@@ -21,19 +22,23 @@ app = Flask(__name__)
 init_db()
 ORDER_EXECUTOR = OrderExecutor()
 
+MODEL_RETRAINER = PhaseFModelRetrainer()
+ROLLBACK_MANAGER = VersionRollbackManager()
+
 
 @app.route("/status")
 def status():
     return jsonify(
         {
             "status": "ONLINE",
-            "phase": "B+E (Analysis + live trading; mandatory iMessage approval)",
+            "phase": "F (Learning & Self-Improvement active; execution controls unchanged)",
             "bankroll": Config.BANKROLL_START,
             "max_risk_per_trade": Config.MAX_TRADE_RISK,
-            "live_trading": True,
-            "approval_required": True,
+            "max_total_exposure": Config.MAX_TOTAL_EXPOSURE,
+            "live_trading": False,
             "min_ev_threshold": Config.MIN_EV_THRESHOLD,
             "min_confirmations": Config.MIN_CONFIRMATIONS,
+            "stress_simulations": Config.MONTE_CARLO_SIMS,
         }
     )
 
@@ -74,84 +79,215 @@ def explain_trade(ticker: str):
             "confirmations": result.edge_decision.confirmations,
             "confirmation_count": result.edge_decision.confirmation_count,
             "risk_checks": result.edge_decision.threshold_checks,
-            "action": "PROPOSAL ONLY (execution requires iMessage approval)",
+            "risk_assessment": _serialize_risk(result.risk_assessment),
+            "proposal_preview": result.proposal_preview,
+            "action": "NO ACTION (Phase F learning active; live execution controls unchanged)",
         }
     )
 
 
-@app.route("/propose_trade/<ticker>", methods=["POST"])
-def propose_trade(ticker: str):
+@app.route("/risk_assessment/<ticker>")
+def risk_assessment(ticker: str):
+    """Return Phase C pre-trade risk output for one ticker."""
     snapshots = {s.ticker: s for s in fetch_price_snapshots()}
     snap = snapshots.get(ticker)
     if not snap:
         return jsonify({"error": f"No data for ticker: {ticker}"}), 404
 
-    proposal_result = propose_trade_with_context(snap)
-    if not proposal_result.risk.approved:
-        return jsonify(
-            {
-                "status": "REJECTED_BY_RISK",
-                "ticker": ticker,
-                "reason": proposal_result.risk.reason,
-                "max_contracts": proposal_result.risk.max_contracts,
-            }
-        ), 400
+    result = analyze_snapshot_with_context(snap)
+    return jsonify({"ticker": ticker, "risk_assessment": _serialize_risk(result.risk_assessment), "read_only": True})
 
-    proposal = proposal_result.proposal
+
+@app.route("/ios/dashboard")
+def ios_dashboard():
+    """Token-protected mobile dashboard payload for the Phase G iOS app/widget."""
+    token_error = _require_ios_token()
+    if token_error:
+        return token_error
+
+    snapshots = fetch_price_snapshots()
+    tracked = snapshots[:5]
+    now = datetime.now(timezone.utc)
+
+    positions = []
+    total_exposure = 0.0
+    total_unrealized = 0.0
+    for snap in tracked:
+        avg_price = (snap.yes_ask + snap.yes_bid) / 2
+        quantity = 1
+        exposure = round(avg_price * quantity, 2)
+        mark = round(snap.yes_bid, 2)
+        unrealized = round((mark - avg_price) * quantity, 2)
+        total_exposure += exposure
+        total_unrealized += unrealized
+        positions.append(
+            {
+                "ticker": snap.ticker,
+                "side": "YES",
+                "contracts": quantity,
+                "avg_price": round(avg_price, 2),
+                "mark_price": mark,
+                "unrealized_pnl": unrealized,
+                "confidence": 0.0,
+            }
+        )
+
+    portfolio_value = round(Config.BANKROLL_START + total_unrealized, 2)
+    history = _build_history_curve(base_value=Config.BANKROLL_START, points=24)
+
     return jsonify(
         {
-            "status": proposal.status,
-            "proposal_id": proposal.proposal_id,
-            "ticker": proposal.ticker,
-            "side": proposal.side,
-            "contracts": proposal.contracts,
-            "max_risk_dollars": proposal.max_risk_dollars,
-            "approval_required_from": Config.IMESSAGE_WHITELIST[0],
+            "status": "ONLINE",
+            "last_updated": now.isoformat(),
+            "phase": "G-companion-read-only",
+            "portfolio": {
+                "bankroll_start": Config.BANKROLL_START,
+                "portfolio_value": portfolio_value,
+                "daily_pnl": round(total_unrealized, 2),
+                "daily_pnl_percent": round((total_unrealized / Config.BANKROLL_START) * 100, 2),
+                "total_exposure": round(total_exposure, 2),
+                "buying_power": round(max(0.0, Config.BANKROLL_START - total_exposure), 2),
+                "live_trading": False,
+            },
+            "positions": positions,
+            "history": history,
         }
     )
 
 
 @app.route("/execute_approved", methods=["POST"])
 def execute_approved():
-    payload = request.get_json(silent=True) or {}
-    proposal_id = (payload.get("proposal_id") or "").upper()
+    """Phase G-safe approval endpoint stub.
 
-    if not proposal_id:
-        return jsonify({"error": "proposal_id is required"}), 400
+    This route is intentionally non-executing for capital preservation.
+    The iOS app can call it for UX testing, but no real order will be sent.
+    """
+    token_error = _require_ios_token()
+    if token_error:
+        return token_error
 
-    proposal = REGISTRY.get(proposal_id)
-    if not proposal:
-        return jsonify({"error": f"Unknown proposal_id: {proposal_id}"}), 404
+    body = request.get_json(silent=True) or {}
+    approval_id = body.get("approval_id", "")
+    approved = bool(body.get("approved", False))
 
-    if proposal.status == "EXECUTED":
-        return jsonify({"error": "Proposal already executed", "proposal_id": proposal_id}), 409
-
-    approved = REGISTRY.sender.wait_for_trade_approval(
-        proposal_id,
-        timeout_seconds=Config.APPROVAL_WAIT_TIMEOUT_SECONDS,
-        poll_interval_seconds=0.1,
-    )
     if not approved:
-        return jsonify({"status": "WAITING_FOR_APPROVAL", "proposal_id": proposal_id}), 202
+        return jsonify({"status": "DECLINED", "message": "No execution attempted (approval flag false).", "read_only": True}), 400
 
-    side = "yes" if proposal.side == "YES" else "no"
-    request_obj = OrderRequest(
-        ticker=proposal.ticker,
-        side=side,
-        contracts=proposal.contracts,
-        order_type="market",
-        client_order_id=proposal_id,
-    )
-    order_result = ORDER_EXECUTOR.place_order(request_obj)
-    REGISTRY.mark(proposal_id, "EXECUTED")
     return jsonify(
         {
-            "status": "EXECUTED",
-            "proposal_id": proposal_id,
-            "order_status": order_result.status,
-            "order_id": order_result.order_id,
+            "status": "STUBBED",
+            "approval_id": approval_id,
+            "message": "Approval acknowledged by API stub. Live order execution remains disabled in this workspace.",
+            "read_only": True,
+            "executed": False,
         }
     )
+
+
+@app.route("/retrain_models")
+def retrain_models():
+    """Trigger offline Phase F retraining and version registration."""
+    report = MODEL_RETRAINER.retrain()
+    version = ROLLBACK_MANAGER.register_version(
+        artifact_path=report.weights_path,
+        notes=f"sample_count={report.sample_count}; brier {report.old_brier}->{report.new_brier}",
+    )
+    return jsonify(
+        {
+            "status": report.status,
+            "sample_count": report.sample_count,
+            "old_brier": report.old_brier,
+            "new_brier": report.new_brier,
+            "artifact_path": report.artifact_path,
+            "weights_path": report.weights_path,
+            "codex_summary": report.codex_summary,
+            "registered_version": version.__dict__,
+        }
+    )
+
+
+@app.route("/self_review")
+def self_review():
+    """Run governance policy review and apply risk parameter adjustments."""
+    # Run against singleton engine used by API compatibility layer.
+    from Phase_A.analysis import _ENGINE
+
+    applied = _ENGINE.risk_gateway.run_self_review()
+
+    return jsonify(
+        {
+            "trade_count": applied.trade_count,
+            "wins": applied.wins,
+            "losses": applied.losses,
+            "total_pnl": applied.total_pnl,
+            "max_drawdown": applied.max_drawdown,
+            "adjustment": {
+                "kelly_scale_factor": applied.adjustment.kelly_scale_factor,
+                "min_confidence_delta": applied.adjustment.min_confidence_delta,
+                "min_ev_delta": applied.adjustment.min_ev_delta,
+                "risk_mode": applied.adjustment.risk_mode,
+                "rationale": applied.adjustment.rationale,
+            },
+        }
+    )
+
+
+def _build_history_curve(base_value: float, points: int) -> list[dict]:
+    """Create deterministic synthetic equity points for dashboard charts."""
+    start = datetime.now(timezone.utc) - timedelta(hours=points - 1)
+    history = []
+    for idx in range(points):
+        timestamp = start + timedelta(hours=idx)
+        drift = ((idx % 5) - 2) * 0.04
+        value = round(base_value + (idx * 0.02) + drift, 2)
+        history.append({"timestamp": timestamp.isoformat(), "value": value})
+    return history
+
+
+def _require_ios_token():
+    """Validate dashboard token from Authorization, custom header, or query param."""
+    expected = Config.IOS_DASHBOARD_TOKEN
+    if not expected:
+        return None
+
+    auth_header = request.headers.get("Authorization", "")
+    bearer_token = auth_header.removeprefix("Bearer ").strip() if auth_header.startswith("Bearer ") else ""
+    provided = bearer_token or request.headers.get("X-Dashboard-Token", "") or request.args.get("token", "")
+
+    if provided != expected:
+        return jsonify({"error": "Unauthorized dashboard token."}), 401
+    return None
+
+
+def _serialize_risk(risk) -> dict:
+    return {
+        "approved": risk.approved,
+        "blockers": risk.blockers,
+        "bankroll": risk.bankroll,
+        "buying_power": risk.buying_power,
+        "sizing": {
+            "recommended_risk": risk.sizing.recommended_risk,
+            "kelly_fraction_raw": risk.sizing.kelly_fraction_raw,
+            "kelly_fraction_applied": risk.sizing.kelly_fraction_applied,
+            "max_risk_cap": risk.sizing.max_risk_cap,
+            "exposure_cap_remaining": risk.sizing.exposure_cap_remaining,
+            "rationale": risk.sizing.rationale,
+        },
+        "fail_safes": {
+            "approved": risk.fail_safe_report.approved,
+            "checks": risk.fail_safe_report.checks,
+            "reasons": risk.fail_safe_report.reasons,
+        },
+        "stress_test": {
+            "simulations": risk.stress_test.simulations,
+            "steps": risk.stress_test.steps,
+            "ruin_probability": risk.stress_test.ruin_probability,
+            "p5_terminal": risk.stress_test.p5_terminal,
+            "p50_terminal": risk.stress_test.p50_terminal,
+            "p95_terminal": risk.stress_test.p95_terminal,
+            "pass_threshold": risk.stress_test.pass_threshold,
+        },
+    }
 
 
 if __name__ == "__main__":

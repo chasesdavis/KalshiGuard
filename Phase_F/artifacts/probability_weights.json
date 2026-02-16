@@ -1,0 +1,13 @@
+{
+  "weights": {
+    "market_implied_yes": 0.35,
+    "external_yes": 0.3,
+    "bayesian_yes": 0.25,
+    "internal_yes": 0.1
+  },
+  "calibration_bias": 0.0,
+  "calibration_temperature": 1.0,
+  "metadata": {
+    "status": "baseline"
+  }
+}
