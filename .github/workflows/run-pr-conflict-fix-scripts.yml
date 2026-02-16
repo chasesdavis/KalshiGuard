@@ -1,0 +1,78 @@
+name: Run PR Conflict Fix Scripts
+
+on:
+  workflow_dispatch:
+    inputs:
+      refs:
+        description: "Branch names, PR numbers, or PR URLs (space/comma/newline separated)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  run-conflict-fix-scripts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Parse workflow input
+        id: refs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          raw_input='${{ github.event.inputs.refs }}'
+          mapfile -t parsed_refs < <(printf '%s\n' "$raw_input" | tr ',\n' '  ' | xargs -n1)
+
+          if [[ "${#parsed_refs[@]}" -eq 0 ]]; then
+            echo "No refs were provided." >&2
+            exit 1
+          fi
+
+          {
+            echo "all_refs<<EOF"
+            printf '%s\n' "${parsed_refs[@]}"
+            echo "EOF"
+            echo "first_ref=${parsed_refs[0]}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run conflict fix scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t refs < <(printf '%s\n' '${{ steps.refs.outputs.all_refs }}')
+
+          mapfile -t scripts < <(find scripts -maxdepth 1 -type f -name 'resolve-pr*conflicts.sh' | sort)
+
+          if [[ "${#scripts[@]}" -eq 0 ]]; then
+            echo "No conflict fix scripts were found under scripts/." >&2
+            exit 1
+          fi
+
+          echo "Found scripts:"
+          printf ' - %s\n' "${scripts[@]}"
+
+          for script in "${scripts[@]}"; do
+            chmod +x "$script"
+            echo
+            echo "=== Running ${script} ==="
+
+            if [[ "$script" =~ resolve-pr3-conflicts\.sh$ ]]; then
+              # Compatibility wrapper accepts one ref.
+              "$script" "${refs[0]}"
+            else
+              "$script" "${refs[@]}"
+            fi
+          done
