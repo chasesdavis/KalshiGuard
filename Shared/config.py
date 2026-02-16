@@ -26,10 +26,10 @@ class Config:
     # Approval wait loop
     APPROVAL_WAIT_TIMEOUT_SECONDS = int(os.getenv("APPROVAL_WAIT_TIMEOUT_SECONDS", "60"))
 
-    # Optional Twilio transport for iMessage/SMS proposal delivery
-    TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
-    TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-    TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER")
+    # Optional BlueBubbles/OpenClaw iMessage bridge transport
+    BLUEBUBBLES_SERVER_URL = os.getenv("BLUEBUBBLES_SERVER_URL")
+    OPENCLAW_API_KEY = os.getenv("OPENCLAW_API_KEY")
+    OPENCLAW_SEND_PATH = os.getenv("OPENCLAW_SEND_PATH", "/openclaw/imessage/send")
 
     # Bankroll constraints
     BANKROLL_START = 50.00

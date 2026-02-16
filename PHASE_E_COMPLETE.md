@@ -11,7 +11,7 @@
 ### 2) Human approval workflow (always required)
 - Added `Phase_E/imessage_sender.py`:
   - Enforces whitelist: `+17657921945` only.
-  - Sends via Twilio Messages API when `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_FROM_NUMBER` are configured.
+  - Sends via BlueBubbles/OpenClaw bridge when `BLUEBUBBLES_SERVER_URL` and `OPENCLAW_API_KEY` are configured (path via `OPENCLAW_SEND_PATH`).
   - Falls back to queued local transport for dev/test.
   - Polls inbound messages for exact approval format:
     - `APPROVE TRADE ID <ID>`

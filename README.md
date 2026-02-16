@@ -36,9 +36,9 @@ python Phase_A/api.py         # start read-only API on :5000 (Phase B analysis e
 | `CODEX_API_KEY` | Optional | Codex Cloud code-generation calls |
 | `KALSHI_API_KEY` | Phase E+ | Kalshi API authentication |
 | `KALSHI_API_SECRET` | Phase E+ | Kalshi API secret |
-| `TWILIO_ACCOUNT_SID` | Optional | Twilio outbound proposal delivery |
-| `TWILIO_AUTH_TOKEN` | Optional | Twilio auth token |
-| `TWILIO_FROM_NUMBER` | Optional | Twilio sender phone number |
+| `BLUEBUBBLES_SERVER_URL` | Optional | BlueBubbles server base URL |
+| `OPENCLAW_API_KEY` | Optional | OpenClaw auth token for iMessage send bridge |
+| `OPENCLAW_SEND_PATH` | Optional | OpenClaw send endpoint path (default `/openclaw/imessage/send`) |
 | `APPROVAL_WAIT_TIMEOUT_SECONDS` | Optional | Wait timeout for approval polling (default 60) |
 
 ## Rules (Non-Negotiable)

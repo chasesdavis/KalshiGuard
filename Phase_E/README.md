@@ -5,7 +5,7 @@
 ## Scope Delivered
 - Kalshi live API connector with HMAC request signing for `/trade-api/v2`.
 - Shared order execution façade with market/limit request support.
-- iMessage approval service enforcing whitelist (`+17657921945`) and exact command format; supports Twilio outbound transport when env credentials are present:
+- iMessage approval service enforcing whitelist (`+17657921945`) and exact command format; supports BlueBubbles + OpenClaw outbound transport when env credentials are present:
   - `APPROVE TRADE ID <PROPOSAL_ID>`
 - Integrated proposal flow:
   1. Phase B analysis computes side/EV/confidence.
@@ -14,7 +14,7 @@
   4. Execution endpoint checks approval and submits live order only after approval.
 
 ## Security and Risk Guards
-- Environment-only credentials (`KALSHI_API_KEY`, `KALSHI_API_SECRET`, optional `TWILIO_*`).
+- Environment-only credentials (`KALSHI_API_KEY`, `KALSHI_API_SECRET`, optional `BLUEBUBBLES_SERVER_URL` + `OPENCLAW_*`).
 - No automatic execution path exists without explicit approval message.
 - Non-whitelisted messages are ignored.
 - Trading freezes if effective bankroll < $40.

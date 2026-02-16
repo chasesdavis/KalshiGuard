@@ -18,12 +18,14 @@ def test_wait_for_approval_exact_trade_id():
     assert not sender.wait_for_trade_approval("XYZ", timeout_seconds=0, poll_interval_seconds=0.01)
 
 
-def test_sender_uses_twilio_when_credentials_present(monkeypatch):
-    monkeypatch.setattr(Config, "TWILIO_ACCOUNT_SID", "AC123")
-    monkeypatch.setattr(Config, "TWILIO_AUTH_TOKEN", "token")
-    monkeypatch.setattr(Config, "TWILIO_FROM_NUMBER", "+19990000000")
+def test_sender_uses_bluebubbles_openclaw_when_configured(monkeypatch):
+    monkeypatch.setattr(Config, "BLUEBUBBLES_SERVER_URL", "https://bb.local")
+    monkeypatch.setattr(Config, "OPENCLAW_API_KEY", "openclaw-token")
+    monkeypatch.setattr(Config, "OPENCLAW_SEND_PATH", "/openclaw/imessage/send")
 
     class FakeResponse:
+        content = b'{"status":"sent"}'
+
         def raise_for_status(self):
             return None
 
@@ -32,8 +34,8 @@ def test_sender_uses_twilio_when_credentials_present(monkeypatch):
 
     captured = {}
 
-    def fake_post(url, data, auth, timeout):
-        captured.update({"url": url, "data": data, "auth": auth, "timeout": timeout})
+    def fake_post(url, json, headers, timeout):
+        captured.update({"url": url, "json": json, "headers": headers, "timeout": timeout})
         return FakeResponse()
 
     monkeypatch.setattr("Phase_E.imessage_sender.requests.post", fake_post)
@@ -41,7 +43,9 @@ def test_sender_uses_twilio_when_credentials_present(monkeypatch):
     sender = IMessageSender()
     result = sender.send_trade_proposal("+17657921945", "proposal")
 
-    assert "Accounts/AC123/Messages.json" in captured["url"]
-    assert captured["data"]["To"] == "+17657921945"
-    assert captured["auth"] == ("AC123", "token")
+    assert captured["url"] == "https://bb.local/openclaw/imessage/send"
+    assert captured["json"]["recipient"] == "+17657921945"
+    assert captured["json"]["service"] == "iMessage"
+    assert captured["headers"]["Authorization"] == "Bearer openclaw-token"
     assert result["status"] == "sent"
+    assert result["provider"] == "bluebubbles-openclaw"

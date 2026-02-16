@@ -1,7 +1,8 @@
-"""iMessage/SMS proposal sender and approval listener.
+"""iMessage proposal sender and approval listener.
 
-This module enforces whitelist-only communication and supports an actual outbound
-transport via Twilio when credentials are provided through environment variables.
+Outbound delivery uses a BlueBubbles server via an OpenClaw-style HTTP bridge when
+configured through environment variables. In local/test mode without bridge config,
+messages are queued in-memory only.
 """
 from __future__ import annotations
 
@@ -25,40 +26,55 @@ class ApprovalMessage:
 
 
 class IMessageSender:
-    """Whitelisted iMessage/SMS notifier with approval polling."""
+    """Whitelisted iMessage notifier with approval polling."""
 
     def __init__(self) -> None:
         self._whitelist = set(Config.IMESSAGE_WHITELIST)
         self._inbox: list[ApprovalMessage] = []
         self._outbox: list[dict[str, str]] = []
 
-    def _is_twilio_enabled(self) -> bool:
-        return bool(Config.TWILIO_ACCOUNT_SID and Config.TWILIO_AUTH_TOKEN and Config.TWILIO_FROM_NUMBER)
+    def _is_bridge_enabled(self) -> bool:
+        return bool(Config.BLUEBUBBLES_SERVER_URL and Config.OPENCLAW_API_KEY)
 
     def send_trade_proposal(self, to_number: str, message: str) -> dict[str, str]:
         """Send proposal message to an approved number only.
 
-        If Twilio credentials are configured, this method sends through Twilio's
-        Messages API. Otherwise, it records a local queued message for test/dev.
+        If BlueBubbles/OpenClaw bridge config is present, sends over HTTP to the
+        configured OpenClaw endpoint. Otherwise records a local queued message.
         """
         if to_number not in self._whitelist:
             raise PermissionError("Recipient is not in iMessage approval whitelist.")
 
-        if self._is_twilio_enabled():
-            twilio_url = (
-                f"https://api.twilio.com/2010-04-01/Accounts/{Config.TWILIO_ACCOUNT_SID}/Messages.json"
-            )
+        if self._is_bridge_enabled():
+            bridge_url = f"{Config.BLUEBUBBLES_SERVER_URL.rstrip('/')}{Config.OPENCLAW_SEND_PATH}"
             response = requests.post(
-                twilio_url,
-                data={"From": Config.TWILIO_FROM_NUMBER, "To": to_number, "Body": message},
-                auth=(Config.TWILIO_ACCOUNT_SID, Config.TWILIO_AUTH_TOKEN),
+                bridge_url,
+                json={
+                    "service": "iMessage",
+                    "recipient": to_number,
+                    "message": message,
+                },
+                headers={
+                    "Authorization": f"Bearer {Config.OPENCLAW_API_KEY}",
+                    "Content-Type": "application/json",
+                },
                 timeout=20,
             )
             response.raise_for_status()
-            payload = response.json()
-            outbound = {"to": to_number, "message": message, "status": payload.get("status", "sent")}
+            payload = response.json() if response.content else {}
+            outbound = {
+                "to": to_number,
+                "message": message,
+                "status": payload.get("status", "sent"),
+                "provider": "bluebubbles-openclaw",
+            }
         else:
-            outbound = {"to": to_number, "message": message, "status": "queued"}
+            outbound = {
+                "to": to_number,
+                "message": message,
+                "status": "queued",
+                "provider": "local-dev-queue",
+            }
 
         self._outbox.append(outbound)
         return outbound
