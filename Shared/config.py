@@ -22,6 +22,7 @@ class Config:
     KALSHI_API_KEY = os.getenv("KALSHI_API_KEY")
     KALSHI_API_SECRET = os.getenv("KALSHI_API_SECRET")
     KALSHI_ENV = os.getenv("KALSHI_ENV", "DEMO")
+    IOS_DASHBOARD_TOKEN = os.getenv("IOS_DASHBOARD_TOKEN")
 
     # Bankroll constraints
     BANKROLL_START = 50.00

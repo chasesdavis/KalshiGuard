@@ -75,3 +75,54 @@ def test_self_review_endpoint():
     data = response.get_json()
     assert "adjustment" in data
     assert "kelly_scale_factor" in data["adjustment"]
+
+
+def test_ios_dashboard_without_token_when_unset():
+    client = app.test_client()
+    previous = api.Config.IOS_DASHBOARD_TOKEN
+    api.Config.IOS_DASHBOARD_TOKEN = None
+    try:
+        response = client.get("/ios/dashboard")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "portfolio" in data
+        assert "positions" in data
+    finally:
+        api.Config.IOS_DASHBOARD_TOKEN = previous
+
+
+def test_ios_dashboard_requires_token_when_set():
+    client = app.test_client()
+    previous = api.Config.IOS_DASHBOARD_TOKEN
+    api.Config.IOS_DASHBOARD_TOKEN = "phase-g-token"
+    try:
+        unauthorized = client.get("/ios/dashboard")
+        assert unauthorized.status_code == 401
+
+        authorized = client.get("/ios/dashboard", headers={"Authorization": "Bearer phase-g-token"})
+        assert authorized.status_code == 200
+    finally:
+        api.Config.IOS_DASHBOARD_TOKEN = previous
+
+
+def test_execute_approved_stub_requires_approved_flag():
+    client = app.test_client()
+    previous = api.Config.IOS_DASHBOARD_TOKEN
+    api.Config.IOS_DASHBOARD_TOKEN = "phase-g-token"
+    try:
+        declined = client.post(
+            "/execute_approved",
+            json={"approval_id": "abc", "approved": False},
+            headers={"Authorization": "Bearer phase-g-token"},
+        )
+        assert declined.status_code == 400
+
+        accepted = client.post(
+            "/execute_approved",
+            json={"approval_id": "abc", "approved": True},
+            headers={"Authorization": "Bearer phase-g-token"},
+        )
+        assert accepted.status_code == 200
+        assert accepted.get_json()["executed"] is False
+    finally:
+        api.Config.IOS_DASHBOARD_TOKEN = previous

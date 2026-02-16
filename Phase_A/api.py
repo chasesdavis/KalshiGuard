@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -96,6 +97,92 @@ def risk_assessment(ticker: str):
     return jsonify({"ticker": ticker, "risk_assessment": _serialize_risk(result.risk_assessment), "read_only": True})
 
 
+@app.route("/ios/dashboard")
+def ios_dashboard():
+    """Token-protected mobile dashboard payload for the Phase G iOS app/widget."""
+    token_error = _require_ios_token()
+    if token_error:
+        return token_error
+
+    snapshots = fetch_price_snapshots()
+    tracked = snapshots[:5]
+    now = datetime.now(timezone.utc)
+
+    positions = []
+    total_exposure = 0.0
+    total_unrealized = 0.0
+    for snap in tracked:
+        avg_price = (snap.yes_ask + snap.yes_bid) / 2
+        quantity = 1
+        exposure = round(avg_price * quantity, 2)
+        mark = round(snap.yes_bid, 2)
+        unrealized = round((mark - avg_price) * quantity, 2)
+        total_exposure += exposure
+        total_unrealized += unrealized
+        positions.append(
+            {
+                "ticker": snap.ticker,
+                "side": "YES",
+                "contracts": quantity,
+                "avg_price": round(avg_price, 2),
+                "mark_price": mark,
+                "unrealized_pnl": unrealized,
+                "confidence": 0.0,
+            }
+        )
+
+    portfolio_value = round(Config.BANKROLL_START + total_unrealized, 2)
+    history = _build_history_curve(base_value=Config.BANKROLL_START, points=24)
+
+    return jsonify(
+        {
+            "status": "ONLINE",
+            "last_updated": now.isoformat(),
+            "phase": "G-companion-read-only",
+            "portfolio": {
+                "bankroll_start": Config.BANKROLL_START,
+                "portfolio_value": portfolio_value,
+                "daily_pnl": round(total_unrealized, 2),
+                "daily_pnl_percent": round((total_unrealized / Config.BANKROLL_START) * 100, 2),
+                "total_exposure": round(total_exposure, 2),
+                "buying_power": round(max(0.0, Config.BANKROLL_START - total_exposure), 2),
+                "live_trading": False,
+            },
+            "positions": positions,
+            "history": history,
+        }
+    )
+
+
+@app.route("/execute_approved", methods=["POST"])
+def execute_approved():
+    """Phase G-safe approval endpoint stub.
+
+    This route is intentionally non-executing for capital preservation.
+    The iOS app can call it for UX testing, but no real order will be sent.
+    """
+    token_error = _require_ios_token()
+    if token_error:
+        return token_error
+
+    body = request.get_json(silent=True) or {}
+    approval_id = body.get("approval_id", "")
+    approved = bool(body.get("approved", False))
+
+    if not approved:
+        return jsonify({"status": "DECLINED", "message": "No execution attempted (approval flag false).", "read_only": True}), 400
+
+    return jsonify(
+        {
+            "status": "STUBBED",
+            "approval_id": approval_id,
+            "message": "Approval acknowledged by API stub. Live order execution remains disabled in this workspace.",
+            "read_only": True,
+            "executed": False,
+        }
+    )
+
+
 @app.route("/retrain_models")
 def retrain_models():
     """Trigger offline Phase F retraining and version registration."""
@@ -142,6 +229,33 @@ def self_review():
             },
         }
     )
+
+
+def _build_history_curve(base_value: float, points: int) -> list[dict]:
+    """Create deterministic synthetic equity points for dashboard charts."""
+    start = datetime.now(timezone.utc) - timedelta(hours=points - 1)
+    history = []
+    for idx in range(points):
+        timestamp = start + timedelta(hours=idx)
+        drift = ((idx % 5) - 2) * 0.04
+        value = round(base_value + (idx * 0.02) + drift, 2)
+        history.append({"timestamp": timestamp.isoformat(), "value": value})
+    return history
+
+
+def _require_ios_token():
+    """Validate dashboard token from Authorization, custom header, or query param."""
+    expected = Config.IOS_DASHBOARD_TOKEN
+    if not expected:
+        return None
+
+    auth_header = request.headers.get("Authorization", "")
+    bearer_token = auth_header.removeprefix("Bearer ").strip() if auth_header.startswith("Bearer ") else ""
+    provided = bearer_token or request.headers.get("X-Dashboard-Token", "") or request.args.get("token", "")
+
+    if provided != expected:
+        return jsonify({"error": "Unauthorized dashboard token."}), 401
+    return None
 
 
 def _serialize_risk(risk) -> dict:

@@ -15,7 +15,7 @@ Codex Cloud integration reads `CODEX_API_KEY` from environment — no secrets in
 | `Phase_D/` | **Paper Trading** — Simulated execution, backtesting harness (≥100 trades before live) | 🔜 Stub |
 | `Phase_E/` | **Live Trading** — Human-approved order execution via iMessage (mandatory until $200+) | 🔜 Stub |
 | `Phase_F/` | **Learning & Self-Improvement** — Offline model retraining, governance, versioned rollback | ✅ Implemented (offline) |
-| `Phase_G/` | **iOS Companion App** — SwiftUI dashboard, WidgetKit, live PnL, glassmorphism UI | 🔜 Stub |
+| `Phase_G/` | **iOS Companion App** — SwiftUI dashboard, WidgetKit, live PnL, glassmorphism UI | ✅ Implemented |
 | `Phase_H/` | **Deployment & Monitoring** — Production hardening, 24/7 ops, alerting, audit logs | 🔜 Stub |
 | `Shared/` | **Common utilities** — Models, config, Codex client, env loading | ✅ Scaffolded |
 | `scripts/` | **Helpers** — Setup, Flask launcher, dashboard check, merge-conflict helper | ✅ Scaffolded |
@@ -36,6 +36,7 @@ python Phase_A/api.py         # start read-only API on :5000 (Phase B analysis e
 | `CODEX_API_KEY` | Optional | Codex Cloud code-generation calls |
 | `KALSHI_API_KEY` | Phase E+ | Kalshi API authentication |
 | `KALSHI_API_SECRET` | Phase E+ | Kalshi API secret |
+| `IOS_DASHBOARD_TOKEN` | Phase G | Token auth between iOS dashboard/widget and Flask API |
 
 ## Rules (Non-Negotiable)
 
