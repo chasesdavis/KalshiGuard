@@ -16,6 +16,7 @@ from Phase_F.model_retrainer import PhaseFModelRetrainer
 from Phase_F.version_rollback import VersionRollbackManager
 from Shared.config import Config
 from Shared.logging_utils import configure_logging
+from Shared.order_executor import OrderExecutor
 
 configure_logging()
 app = Flask(__name__)
