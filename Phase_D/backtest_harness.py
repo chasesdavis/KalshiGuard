@@ -41,14 +41,16 @@ class BacktestHarness:
         for idx in range(trades):
             snapshot = self._derive_snapshot(snapshots[idx % len(snapshots)], idx)
             analysis = self.engine.analyze_snapshot(snapshot)
-            entry = snapshot.yes_ask if analysis.edge_decision.side != "NO" else snapshot.no_ask
+            entry = analysis.paper_trade_proposal.entry_price_cents
             assessment = self.risk.assess_trade(
                 bankroll_tracker=tracker,
                 probability_yes=analysis.probability_estimate.ensemble_yes,
                 entry_price_cents=entry,
                 active_exposure=0.0,
             )
-            result: PaperTradeResult = self.trader.run_single_simulation(analysis, assessment, tracker)
+            result: PaperTradeResult = self.trader.run_single_simulation(
+                analysis, assessment, tracker, log_i_message_stub=False
+            )
             executed += 1
             approved += int(result.approved and result.simulated_trade is not None)
 

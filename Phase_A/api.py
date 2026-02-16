@@ -115,16 +115,22 @@ def paper_trade_sim(ticker: str):
     if not snap:
         return jsonify({"error": f"No baseline snapshot for ticker: {ticker}"}), 404
 
-    snap.yes_ask = payload["yes_ask"]
-    snap.no_ask = payload["no_ask"]
-    snap.yes_bid = payload["yes_bid"]
-    snap.no_bid = payload["no_bid"]
+    sim_snapshot = type(snap)(
+        ticker=snap.ticker,
+        timestamp=snap.timestamp,
+        yes_ask=payload["yes_ask"],
+        no_ask=payload["no_ask"],
+        yes_bid=payload["yes_bid"],
+        no_bid=payload["no_bid"],
+        volume=snap.volume,
+        open_interest=snap.open_interest,
+    )
 
-    analysis = analyze_snapshot_with_context(snap)
+    analysis = analyze_snapshot_with_context(sim_snapshot)
     risk = RiskGateway().assess_paper_simulation(
         bankroll_tracker=BankrollTracker(starting_bankroll=50.0),
         probability_yes=analysis.probability_estimate.ensemble_yes,
-        entry_price_cents=snap.yes_ask if analysis.edge_decision.side != "NO" else snap.no_ask,
+        entry_price_cents=analysis.paper_trade_proposal.entry_price_cents,
     )
 
     harness_summary = BacktestHarness().run(trades=100)

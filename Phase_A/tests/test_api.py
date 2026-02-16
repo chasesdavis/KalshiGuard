@@ -43,6 +43,7 @@ def test_paper_trade_sim():
     payload = response.get_json()
     assert payload["ticker"] == "FED-RATE-25MAR"
     assert "backtest_100_trade_summary" in payload
+    assert payload["proposal"]["generation_mode"] in {"edge_confirmed", "repricing_fallback"}
 
 
 def test_explain_trade_missing():

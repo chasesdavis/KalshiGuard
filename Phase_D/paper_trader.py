@@ -28,30 +28,31 @@ class PaperTrader:
         analysis: AnalysisResult,
         risk: RiskAssessment,
         bankroll_tracker: BankrollTracker,
+        log_i_message_stub: bool = True,
     ) -> PaperTradeResult:
-        proposal = IMessageProposal(
-            ticker=analysis.signal.ticker,
-            side=analysis.edge_decision.side,
-            stake_dollars=risk.proposed_stake,
-            rationale=analysis.signal.explanation.splitlines()[0],
-        )
-        log_proposal(proposal)
+        if log_i_message_stub:
+            proposal = IMessageProposal(
+                ticker=analysis.signal.ticker,
+                side=analysis.paper_trade_proposal.side,
+                stake_dollars=risk.proposed_stake,
+                rationale=analysis.signal.explanation.splitlines()[0],
+            )
+            log_proposal(proposal)
 
         simulated: SimulatedTrade | None = None
-        if risk.approved and analysis.edge_decision.side in {"YES", "NO"}:
-            entry = analysis.snapshot.yes_ask if analysis.edge_decision.side == "YES" else analysis.snapshot.no_ask
+        if risk.approved and analysis.paper_trade_proposal.side in {"YES", "NO"}:
             simulated = TradeSimulator.simulate_resolution(
                 ticker=analysis.signal.ticker,
-                side=analysis.edge_decision.side,
+                side=analysis.paper_trade_proposal.side,
                 stake_dollars=risk.proposed_stake,
-                entry_price_cents=entry,
+                entry_price_cents=analysis.paper_trade_proposal.entry_price_cents,
                 probability_yes=analysis.probability_estimate.ensemble_yes,
             )
             bankroll_tracker.apply_pnl(simulated.pnl_dollars)
 
         return PaperTradeResult(
             ticker=analysis.signal.ticker,
-            side=analysis.edge_decision.side,
+            side=analysis.paper_trade_proposal.side,
             approved=risk.approved,
             risk=risk,
             simulated_trade=simulated,
