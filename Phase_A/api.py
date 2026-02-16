@@ -1,4 +1,4 @@
-"""KalshiGuard API — read-only data endpoints, analysis explanation, and risk assessment."""
+"""KalshiGuard API — data endpoints, analysis explanation, risk assessment, and Phase F learning hooks."""
 from __future__ import annotations
 
 import os
@@ -11,6 +11,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from Phase_A.analysis import analyze_snapshot_with_context
 from Phase_A.data_fetcher import fetch_markets, fetch_price_snapshots
 from Phase_A.logger import init_db, log_signal
+from Phase_F.model_retrainer import PhaseFModelRetrainer
+from Phase_F.version_rollback import VersionRollbackManager
 from Shared.config import Config
 from Shared.logging_utils import configure_logging
 
@@ -18,13 +20,16 @@ configure_logging()
 app = Flask(__name__)
 init_db()
 
+MODEL_RETRAINER = PhaseFModelRetrainer()
+ROLLBACK_MANAGER = VersionRollbackManager()
+
 
 @app.route("/status")
 def status():
     return jsonify(
         {
             "status": "ONLINE",
-            "phase": "C (Risk Management active; read-only execution)",
+            "phase": "F (Learning & Self-Improvement active; execution controls unchanged)",
             "bankroll": Config.BANKROLL_START,
             "max_risk_per_trade": Config.MAX_TRADE_RISK,
             "max_total_exposure": Config.MAX_TOTAL_EXPOSURE,
@@ -74,7 +79,7 @@ def explain_trade(ticker: str):
             "risk_checks": result.edge_decision.threshold_checks,
             "risk_assessment": _serialize_risk(result.risk_assessment),
             "proposal_preview": result.proposal_preview,
-            "action": "NO ACTION (Phase C risk + analysis only — execution disabled)",
+            "action": "NO ACTION (Phase F learning active; live execution controls unchanged)",
         }
     )
 
@@ -89,6 +94,54 @@ def risk_assessment(ticker: str):
 
     result = analyze_snapshot_with_context(snap)
     return jsonify({"ticker": ticker, "risk_assessment": _serialize_risk(result.risk_assessment), "read_only": True})
+
+
+@app.route("/retrain_models")
+def retrain_models():
+    """Trigger offline Phase F retraining and version registration."""
+    report = MODEL_RETRAINER.retrain()
+    version = ROLLBACK_MANAGER.register_version(
+        artifact_path=report.weights_path,
+        notes=f"sample_count={report.sample_count}; brier {report.old_brier}->{report.new_brier}",
+    )
+    return jsonify(
+        {
+            "status": report.status,
+            "sample_count": report.sample_count,
+            "old_brier": report.old_brier,
+            "new_brier": report.new_brier,
+            "artifact_path": report.artifact_path,
+            "weights_path": report.weights_path,
+            "codex_summary": report.codex_summary,
+            "registered_version": version.__dict__,
+        }
+    )
+
+
+@app.route("/self_review")
+def self_review():
+    """Run governance policy review and apply risk parameter adjustments."""
+    # Run against singleton engine used by API compatibility layer.
+    from Phase_A.analysis import _ENGINE
+
+    applied = _ENGINE.risk_gateway.run_self_review()
+
+    return jsonify(
+        {
+            "trade_count": applied.trade_count,
+            "wins": applied.wins,
+            "losses": applied.losses,
+            "total_pnl": applied.total_pnl,
+            "max_drawdown": applied.max_drawdown,
+            "adjustment": {
+                "kelly_scale_factor": applied.adjustment.kelly_scale_factor,
+                "min_confidence_delta": applied.adjustment.min_confidence_delta,
+                "min_ev_delta": applied.adjustment.min_ev_delta,
+                "risk_mode": applied.adjustment.risk_mode,
+                "rationale": applied.adjustment.rationale,
+            },
+        }
+    )
 
 
 def _serialize_risk(risk) -> dict:

@@ -1,4 +1,4 @@
-"""Risk gateway that combines sizing, fail-safe checks, and stress testing."""
+"""Risk gateway that combines sizing, fail-safe checks, stress testing, and Phase F self-review."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from Phase_C.fail_safes import FailSafeEvaluator, FailSafeReport
 from Phase_C.kelly_sizing import FractionalKellySizer, PositionSizeDecision
 from Phase_C.monte_carlo_stress import MonteCarloStressTester, StressTestReport
+from Phase_F.governance_engine import GovernanceEngine, GovernanceReport
 from Shared.bankroll_tracker import BankrollTracker
 from Shared.config import Config
 from Shared.models import PriceSnapshot
@@ -32,6 +33,8 @@ class RiskGateway:
         self.sizer = FractionalKellySizer()
         self.fail_safes = FailSafeEvaluator()
         self.stress_tester = MonteCarloStressTester()
+        self.governance_engine = GovernanceEngine()
+        self.kelly_scale_factor = 1.0
 
     def assess(self, snapshot: PriceSnapshot, side: str, ensemble_yes: float) -> RiskAssessment:
         fail_safe_report = self.fail_safes.evaluate(
@@ -41,11 +44,12 @@ class RiskGateway:
             weekly_loss=self.tracker.weekly_loss,
         )
 
+        effective_multiplier = self.tracker.kelly_multiplier * self.kelly_scale_factor
         sizing = self.sizer.size_risk(
             side=side,
             prob_yes=ensemble_yes,
             bankroll=self.tracker.current_bankroll,
-            kelly_multiplier=self.tracker.kelly_multiplier,
+            kelly_multiplier=effective_multiplier,
             exposure_cap_remaining=self.tracker.exposure_capacity,
         )
 
@@ -84,3 +88,12 @@ class RiskGateway:
             approved=approved,
             blockers=blockers,
         )
+
+    def run_self_review(self) -> GovernanceReport:
+        """Apply governance policy and update Kelly scaling in-memory."""
+        report = self.governance_engine.run_self_review(
+            daily_loss=self.tracker.daily_loss,
+            weekly_loss=self.tracker.weekly_loss,
+        )
+        self.kelly_scale_factor = report.adjustment.kelly_scale_factor
+        return report
