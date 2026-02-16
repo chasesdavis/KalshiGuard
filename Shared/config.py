@@ -29,11 +29,24 @@ class Config:
     MAX_TOTAL_EXPOSURE = 2.00
     MAX_THEME_EXPOSURE = 5.00
     KELLY_FRACTION = 0.25
+    KELLY_BASE_MULTIPLIER = 0.10
+    KELLY_GROWTH_MULTIPLIER = 0.25
+    GROWTH_UNLOCK_RATIO = 1.20
+    MIN_BUYING_POWER = 40.00
+
+    # Analysis thresholds
     MIN_EV_THRESHOLD = 0.40
     MIN_CONFIDENCE = 0.97
     MIN_CONFIRMATIONS = 4
+
+    # Drawdown controls
     DRAWDOWN_DAILY_LIMIT = 0.25
     DRAWDOWN_WEEKLY_LIMIT = 1.00
+
+    # Stress testing
+    MONTE_CARLO_SIMS = 1000
+    MONTE_CARLO_STEPS = 25
+    MAX_RUIN_PROBABILITY = 0.05
 
     # iMessage whitelist (sole authorized number)
     IMESSAGE_WHITELIST = ["+17657921945"]
