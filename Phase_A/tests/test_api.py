@@ -1,4 +1,8 @@
 """Basic smoke tests for KalshiGuard API."""
+from types import SimpleNamespace
+
+from Phase_B.analysis_engine import PaperTradeProposal
+from Phase_C.risk_gateway import RiskAssessment
 import os
 import sys
 
@@ -34,7 +38,19 @@ def test_explain_trade():
     assert data["side"] in {"HOLD", "YES", "NO"}
     assert "probability_estimate" in data
     assert "confirmations" in data
+    assert "risk_assessment" in data
+    assert "paper_trade_proposal" in data
     assert "action" in data
+
+
+def test_paper_trade_sim():
+    client = app.test_client()
+    response = client.get("/paper_trade_sim/FED-RATE-25MAR")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["ticker"] == "FED-RATE-25MAR"
+    assert "backtest_100_trade_summary" in payload
+    assert payload["proposal"]["generation_mode"] in {"edge_confirmed", "repricing_fallback"}
 
 
 def test_explain_trade_missing():

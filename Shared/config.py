@@ -21,6 +21,8 @@ class Config:
     CODEX_API_KEY = os.getenv("CODEX_API_KEY")
     KALSHI_API_KEY = os.getenv("KALSHI_API_KEY")
     KALSHI_API_SECRET = os.getenv("KALSHI_API_SECRET")
+    DEMO_KALSHI_API_KEY = os.getenv("DEMO_KALSHI_API_KEY")
+    DEMO_KALSHI_API_SECRET = os.getenv("DEMO_KALSHI_API_SECRET")
     KALSHI_ENV = os.getenv("KALSHI_ENV", "DEMO")
     IOS_DASHBOARD_TOKEN = os.getenv("IOS_DASHBOARD_TOKEN")
 
