@@ -1,18 +1,38 @@
 # Phase D — Paper Trading 📝
 
-**Status:** 🔜 Planned (unlocks after Phase C validated)
+**Status:** ✅ Implemented
 
-## What This Phase Will Do
-- Simulate trade execution against live Kalshi orderbooks (no real orders)
-- Backtest ≥100 simulated trades with full EV/risk logging
-- Track simulated P&L, Sharpe ratio, max drawdown
-- Run for minimum 2 weeks before Phase E approval
-- Generate daily reports with per-trade explanations
+## Overview
+Phase D enables full paper-trading execution in demo/read-only mode:
 
-## Depends On
-- Phase C (risk management must pass stress tests)
+- Demo market connector with env-based auth stubs (`DEMO_KALSHI_API_KEY`, `DEMO_KALSHI_API_SECRET`)
+- Single-trade simulator route via Flask (`/paper_trade_sim/<ticker>`)
+- Risk-first paper order lifecycle (proposal → risk gate → simulated resolution)
+- Deterministic backtest harness with 100+ simulated trades starting from $50 mock bankroll
+- Integration with Phase B analysis outputs and Phase C risk controls
 
-## Key Files (to be created)
-- `paper_executor.py` — Simulated order execution
-- `backtest_harness.py` — Historical replay engine
-- `performance_tracker.py` — Sharpe, drawdown, P&L metrics
+## Files
+- `demo_connector.py` — Demo API fetcher with resilient local fallback
+- `paper_trader.py` — iMessage proposal stub logging + simulated execution orchestration
+- `backtest_harness.py` — 100-trade replay batch and aggregate metrics
+- `tests/` — Phase D tests for harness and edge cases
+
+## Run
+```bash
+python Phase_A/api.py
+```
+Then call:
+```bash
+curl http://localhost:5000/paper_trade_sim/FED-RATE-25MAR
+```
+
+## Test
+```bash
+pytest Phase_A/tests Phase_B/tests Phase_C/tests Phase_D/tests -q
+```
+
+## Security/Risk Rules
+- No live execution calls are made.
+- All trade actions are simulated only.
+- Every simulation starts from a $50 bankroll context.
+- Risk gateway blocks entries with non-zero ruin probability, drawdown limit hits, or cap breaches.

@@ -11,8 +11,8 @@ Codex Cloud integration reads `CODEX_API_KEY` from environment — no secrets in
 |--------|---------|--------|
 | `Phase_A/` | **Data Collection** — Read-only Kalshi data fetcher, models, SQLite logging, Flask API, `/explain_trade` | ✅ Scaffolded |
 | `Phase_B/` | **Analysis Engine** — EV calculation, edge detection, multi-source probability models | ✅ Implemented (read-only) |
-| `Phase_C/` | **Risk Management** — Position sizing, fractional Kelly, Monte Carlo stress tests, fail-safes | 🔜 Stub |
-| `Phase_D/` | **Paper Trading** — Simulated execution, backtesting harness (≥100 trades before live) | 🔜 Stub |
+| `Phase_C/` | **Risk Management** — Position sizing, fractional Kelly, Monte Carlo stress tests, fail-safes | ✅ Implemented |
+| `Phase_D/` | **Paper Trading** — Simulated execution, backtesting harness (≥100 trades before live) | ✅ Implemented |
 | `Phase_E/` | **Live Trading** — Human-approved order execution via iMessage (mandatory until $200+) | 🔜 Stub |
 | `Phase_F/` | **Learning & Self-Improvement** — Offline model retraining, governance, versioned rollback | 🔜 Stub |
 | `Phase_G/` | **iOS Companion App** — SwiftUI dashboard, WidgetKit, live PnL, glassmorphism UI | 🔜 Stub |
@@ -34,6 +34,8 @@ python Phase_A/api.py         # start read-only API on :5000 (Phase B analysis e
 | Var | Required | Purpose |
 |-----|----------|---------|
 | `CODEX_API_KEY` | Optional | Codex Cloud code-generation calls |
+| `DEMO_KALSHI_API_KEY` | Optional (Phase D) | Demo Kalshi API key for paper simulations |
+| `DEMO_KALSHI_API_SECRET` | Optional (Phase D) | Demo Kalshi API secret for paper simulations |
 | `KALSHI_API_KEY` | Phase E+ | Kalshi API authentication |
 | `KALSHI_API_SECRET` | Phase E+ | Kalshi API secret |
 

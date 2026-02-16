@@ -1,4 +1,4 @@
-"""Phase B orchestration for explainable EV analysis."""
+"""Phase B orchestration for explainable EV analysis and paper-trade proposals."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,7 +6,22 @@ from dataclasses import dataclass
 from Phase_B.edge_detector import EdgeDecision, EdgeDetector
 from Phase_B.external_data import ExternalDataProvider
 from Phase_B.probability_engine import ProbabilityEngine, ProbabilityEstimate
+from Phase_C.risk_gateway import RiskAssessment, RiskGateway
+from Shared.bankroll_tracker import BankrollTracker
 from Shared.models import EVSignal, PriceSnapshot
+
+
+@dataclass(frozen=True)
+class PaperTradeProposal:
+    """Phase B output for Phase D paper-trading candidate."""
+
+    ticker: str
+    side: str
+    entry_price_cents: float
+    probability_yes: float
+    approved_by_risk: bool
+    proposed_stake: float
+    risk_reasons: list[str]
 
 
 @dataclass(frozen=True)
@@ -17,6 +32,9 @@ class AnalysisResult:
     probability_estimate: ProbabilityEstimate
     edge_decision: EdgeDecision
     external_payload: dict
+    snapshot: PriceSnapshot
+    risk_assessment: RiskAssessment
+    paper_trade_proposal: PaperTradeProposal
 
 
 class PhaseBAnalysisEngine:
@@ -26,6 +44,7 @@ class PhaseBAnalysisEngine:
         self.external_data = ExternalDataProvider()
         self.probability_engine = ProbabilityEngine()
         self.edge_detector = EdgeDetector()
+        self.risk_gateway = RiskGateway()
 
     def analyze_snapshot(self, snapshot: PriceSnapshot) -> AnalysisResult:
         anchors = self.external_data.get_probability_anchors(snapshot.ticker)
@@ -34,7 +53,23 @@ class PhaseBAnalysisEngine:
         confidence = self.probability_engine.aggregate_confidence(estimate, anchors)
         decision = self.edge_detector.evaluate(snapshot, estimate, confidence)
 
-        explanation = self._build_explanation(snapshot, estimate, decision, external_payload)
+        risk_assessment = self.risk_gateway.assess_trade(
+            bankroll_tracker=BankrollTracker(starting_bankroll=50.0),
+            probability_yes=estimate.ensemble_yes,
+            entry_price_cents=snapshot.yes_ask if decision.side != "NO" else snapshot.no_ask,
+        )
+
+        proposal = PaperTradeProposal(
+            ticker=snapshot.ticker,
+            side=decision.side,
+            entry_price_cents=snapshot.yes_ask if decision.side != "NO" else snapshot.no_ask,
+            probability_yes=round(estimate.ensemble_yes, 4),
+            approved_by_risk=risk_assessment.approved,
+            proposed_stake=risk_assessment.proposed_stake,
+            risk_reasons=risk_assessment.fail_safe_reasons,
+        )
+
+        explanation = self._build_explanation(snapshot, estimate, decision, external_payload, risk_assessment)
         signal = EVSignal(
             ticker=snapshot.ticker,
             ev_percent=round(decision.ev_percent, 2),
@@ -48,6 +83,9 @@ class PhaseBAnalysisEngine:
             probability_estimate=estimate,
             edge_decision=decision,
             external_payload=external_payload,
+            snapshot=snapshot,
+            risk_assessment=risk_assessment,
+            paper_trade_proposal=proposal,
         )
 
     @staticmethod
@@ -56,6 +94,7 @@ class PhaseBAnalysisEngine:
         estimate: ProbabilityEstimate,
         decision: EdgeDecision,
         external_payload: dict,
+        risk_assessment: RiskAssessment,
     ) -> str:
         source_names = ", ".join(s["name"] for s in external_payload["sources"])
         return (
@@ -68,5 +107,6 @@ class PhaseBAnalysisEngine:
             f"- Confirmations ({decision.confirmation_count}): {', '.join(decision.confirmations) or 'none'}\n"
             f"- Threshold checks: {decision.threshold_checks}\n"
             f"- Side: {decision.side} | EV: {decision.ev_percent:.2f}%\n"
+            f"- Risk approved: {risk_assessment.approved} | stake=${risk_assessment.proposed_stake:.2f} | ruin={risk_assessment.ruin_probability:.4f}\n"
             f"- Sources: {source_names}"
         )
