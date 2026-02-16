@@ -1,37 +1,33 @@
-"""Phase A analysis — placeholder EV engine with structured explanations."""
-import sys, os
+"""Phase A compatibility layer delegating analysis to Phase B engine."""
+from __future__ import annotations
+
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from Shared.models import EVSignal
 
-def compute_ev_for_signal(ticker, snapshot) -> EVSignal:
-    """
-    Compute expected value for a market snapshot.
-    Phase A: conservative placeholder (always returns HOLD).
-    Phase B+ will plug in real probability models.
-    """
-    implied_yes = snapshot.yes_ask / 100.0
-    implied_no = snapshot.no_ask / 100.0
-    spread = snapshot.yes_ask - snapshot.yes_bid
+from Phase_B.analysis_engine import AnalysisResult, PhaseBAnalysisEngine
+from Shared.models import EVSignal, PriceSnapshot
 
-    # Phase A: no edge claimed — just report market state
-    ev = 0.0
-    confidence = 0.0
-    side = "HOLD"
+_ENGINE = PhaseBAnalysisEngine()
 
-    explanation = (
-        f"Market: {ticker}\n"
-        f"  YES price: {snapshot.yes_bid}–{snapshot.yes_ask}¢ (implied {implied_yes:.0%})\n"
-        f"  NO  price: {snapshot.no_bid}–{snapshot.no_ask}¢ (implied {implied_no:.0%})\n"
-        f"  Spread: {spread}¢ | Volume: {snapshot.volume:,} | OI: {snapshot.open_interest:,}\n"
-        f"  Phase A verdict: HOLD (no model edge claimed yet)\n"
-        f"  ⚠️  Requires Phase B analysis engine for real EV estimates."
-    )
 
-    return EVSignal(
-        ticker=ticker,
-        ev_percent=ev,
-        confidence=confidence,
-        explanation=explanation,
-        data_sources=["mock_orderbook"],
-        side=side,
-    )
+def compute_ev_for_signal(ticker: str, snapshot: PriceSnapshot) -> EVSignal:
+    """Return EV signal for API compatibility."""
+    if ticker != snapshot.ticker:
+        snapshot = PriceSnapshot(
+            ticker=ticker,
+            timestamp=snapshot.timestamp,
+            yes_bid=snapshot.yes_bid,
+            yes_ask=snapshot.yes_ask,
+            no_bid=snapshot.no_bid,
+            no_ask=snapshot.no_ask,
+            volume=snapshot.volume,
+            open_interest=snapshot.open_interest,
+        )
+    return _ENGINE.analyze_snapshot(snapshot).signal
+
+
+def analyze_snapshot_with_context(snapshot: PriceSnapshot) -> AnalysisResult:
+    """Expose full Phase B context for structured API responses."""
+    return _ENGINE.analyze_snapshot(snapshot)

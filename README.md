@@ -10,7 +10,7 @@ Codex Cloud integration reads `CODEX_API_KEY` from environment — no secrets in
 | Folder | Purpose | Status |
 |--------|---------|--------|
 | `Phase_A/` | **Data Collection** — Read-only Kalshi data fetcher, models, SQLite logging, Flask API, `/explain_trade` | ✅ Scaffolded |
-| `Phase_B/` | **Analysis Engine** — EV calculation, edge detection, multi-source probability models | 🔜 Stub |
+| `Phase_B/` | **Analysis Engine** — EV calculation, edge detection, multi-source probability models | ✅ Implemented (read-only) |
 | `Phase_C/` | **Risk Management** — Position sizing, fractional Kelly, Monte Carlo stress tests, fail-safes | 🔜 Stub |
 | `Phase_D/` | **Paper Trading** — Simulated execution, backtesting harness (≥100 trades before live) | 🔜 Stub |
 | `Phase_E/` | **Live Trading** — Human-approved order execution via iMessage (mandatory until $200+) | 🔜 Stub |
@@ -26,7 +26,7 @@ Codex Cloud integration reads `CODEX_API_KEY` from environment — no secrets in
 cd KalshiGuard
 pip install -r requirements.txt
 cp .env.example .env          # add your keys here (never commit .env)
-python Phase_A/api.py         # start read-only API on :5000
+python Phase_A/api.py         # start read-only API on :5000 (Phase B analysis enabled)
 ```
 
 ## Environment Variables

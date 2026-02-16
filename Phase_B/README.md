@@ -1,19 +1,21 @@
 # Phase B — Analysis Engine 🧠
 
-**Status:** 🔜 Planned (unlocks after Phase A validated)
+**Status:** ✅ Implemented (read-only analysis, no execution)
 
-## What This Phase Will Do
-- Connect to external data anchors (CME FedWatch, FRED, NOAA, polling aggregates)
-- Build ensemble probability models (Bayesian + lightweight neural nets)
-- Detect multi-layer edges: external calibration arb, internal mispricings, market making
-- Require ≥4 independent confirmations before flagging an edge
-- EV threshold: ≥40% after fees for directional trades
+## Implemented Components
+- `external_data.py` — mock external calibration anchors (CME/FRED/NOAA style interfaces)
+- `probability_engine.py` — market + external + Bayesian + internal ensemble probability model
+- `edge_detector.py` — confirmation stack and EV/confirmation/confidence threshold gates
+- `analysis_engine.py` — orchestration layer that produces structured analysis payloads
+- `tests/` — unit tests for probability and edge decision behavior
 
-## Depends On
-- Phase A (data collection layer must be validated and stable)
-- Historical backfill ≥6 months of Kalshi data
+## Key Risk Rules Enforced
+- Minimum EV gate: **40%**
+- Minimum confirmations: **4 independent confirmations**
+- Minimum confidence: **97%**
+- If any gate fails, output is forced to `HOLD`
 
-## Key Files (to be created)
-- `probability_engine.py` — Ensemble model inference
-- `edge_detector.py` — Multi-layer edge confirmation
-- `external_data.py` — CME, FRED, NOAA connectors
+## Notes
+- Phase B remains read-only.
+- No Kalshi auth is used.
+- External connectors are currently deterministic stubs to keep CI stable.

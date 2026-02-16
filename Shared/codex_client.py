@@ -1,37 +1,54 @@
+"""Codex Cloud client wrapper.
+
+Reads API key from env and fails gracefully when unavailable.
 """
-Codex Cloud client — reads CODEX_API_KEY from env.
-Returns None gracefully when key is absent (Phase A works without it).
-"""
-import os, json, logging
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+
 import requests
+
+from Shared.config import Config
 
 logger = logging.getLogger(__name__)
 
-CODEX_ENDPOINT = os.getenv(
-    "CODEX_API_ENDPOINT",
-    "https://api.openai.com/v1/chat/completions"  # default OpenAI endpoint
-)
 
-def load_api_key() -> str | None:
-    return os.getenv("CODEX_API_KEY")
+@dataclass
+class CodexClient:
+    """Minimal wrapper around chat-completions for optional code-assist workflows."""
 
-def generate_code(prompt: str, model: str = "gpt-4o", temperature: float = 0.2) -> str | None:
-    api_key = load_api_key()
-    if not api_key:
-        logger.info("CODEX_API_KEY not set — skipping Codex call.")
-        return None
+    endpoint: str = "https://api.openai.com/v1/chat/completions"
+    model: str = "gpt-4o"
 
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": temperature,
-        "max_tokens": 2048,
-    }
-    try:
-        resp = requests.post(CODEX_ENDPOINT, headers=headers, json=payload, timeout=60)
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
-    except Exception as e:
-        logger.error(f"Codex call failed: {e}")
-        return None
+    def is_available(self) -> bool:
+        return bool(Config.CODEX_API_KEY)
+
+    def generate_text(self, prompt: str, temperature: float = 0.2, max_tokens: int = 1024) -> str | None:
+        if not self.is_available():
+            logger.info("CODEX_API_KEY is not configured; skipping Codex request.")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {Config.CODEX_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+
+        try:
+            response = requests.post(self.endpoint, headers=headers, json=payload, timeout=45)
+            response.raise_for_status()
+            return response.json()["choices"][0]["message"]["content"]
+        except requests.RequestException as exc:
+            logger.error("Codex request failed: %s", exc)
+            return None
+
+
+def get_codex_client() -> CodexClient:
+    """Factory for convenience in call sites."""
+    return CodexClient()
