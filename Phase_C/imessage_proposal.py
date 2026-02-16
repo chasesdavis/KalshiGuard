@@ -11,6 +11,31 @@ from Phase_C.risk_gateway import RiskAssessment
 from Shared.config import Config
 
 logger = logging.getLogger(__name__)
+REGISTRY: dict[str, dict[str, Any]] = {}
+
+
+@dataclass(frozen=True)
+class IMessageProposal:
+    ticker: str
+    side: str
+    stake_dollars: float
+    rationale: str
+
+
+def log_proposal(proposal: IMessageProposal) -> None:
+    """Backward-compatible proposal logger used by Phase D tests."""
+    logger.info(
+        "proposal stub ticker=%s side=%s stake=%.2f rationale=%s",
+        proposal.ticker,
+        proposal.side,
+        proposal.stake_dollars,
+        proposal.rationale,
+    )
+
+
+def record_incoming_message(from_number: str, message: str) -> None:
+    """Compatibility hook for newer approval-flow tests."""
+    REGISTRY.setdefault("inbox", []).append({"from_number": from_number, "message": message})
 
 
 def format_trade_proposal(analysis_result: Any, risk_assessment: RiskAssessment) -> str:

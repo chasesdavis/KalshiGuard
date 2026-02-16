@@ -13,6 +13,7 @@ from Phase_A.analysis import analyze_snapshot_with_context, propose_trade_with_c
 from Phase_A.data_fetcher import fetch_markets, fetch_price_snapshots
 from Phase_A.logger import init_db, log_signal
 from Phase_C.imessage_proposal import REGISTRY
+from Phase_D.backtest_harness import BacktestHarness
 from Phase_F.model_retrainer import PhaseFModelRetrainer
 from Phase_F.version_rollback import VersionRollbackManager
 from Shared.config import Config
@@ -82,6 +83,7 @@ def explain_trade(ticker: str):
             "confirmation_count": result.edge_decision.confirmation_count,
             "risk_checks": result.edge_decision.threshold_checks,
             "risk_assessment": _serialize_risk(result.risk_assessment),
+            "paper_trade_proposal": result.paper_trade_proposal.__dict__,
             "proposal_preview": result.proposal_preview,
             "action": "NO ACTION (Phase F learning active; live execution controls unchanged)",
         }
@@ -98,6 +100,26 @@ def risk_assessment(ticker: str):
 
     result = analyze_snapshot_with_context(snap)
     return jsonify({"ticker": ticker, "risk_assessment": _serialize_risk(result.risk_assessment), "read_only": True})
+
+
+@app.route("/paper_trade_sim/<ticker>")
+def paper_trade_sim(ticker: str):
+    """Run a single proposal preview plus 100-trade deterministic backtest summary."""
+    snapshots = {s.ticker: s for s in fetch_price_snapshots()}
+    snap = snapshots.get(ticker)
+    if not snap:
+        return jsonify({"error": f"No data for ticker: {ticker}"}), 404
+
+    result = analyze_snapshot_with_context(snap)
+    backtest = BacktestHarness().run(trades=100)
+    return jsonify(
+        {
+            "ticker": ticker,
+            "proposal": result.paper_trade_proposal.__dict__,
+            "backtest_100_trade_summary": backtest.__dict__,
+            "read_only": True,
+        }
+    )
 
 
 @app.route("/ios/dashboard")

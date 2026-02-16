@@ -12,6 +12,20 @@ from Shared.models import EVSignal, PriceSnapshot
 
 
 @dataclass(frozen=True)
+class PaperTradeProposal:
+    """Phase B output for Phase D paper-trading candidate."""
+
+    ticker: str
+    side: str
+    entry_price_cents: float
+    probability_yes: float
+    approved_by_risk: bool
+    proposed_stake: float
+    risk_reasons: list[str]
+    generation_mode: str
+
+
+@dataclass(frozen=True)
 class AnalysisResult:
     """Full analysis payload for API and logging."""
 
@@ -20,6 +34,7 @@ class AnalysisResult:
     edge_decision: EdgeDecision
     external_payload: dict
     risk_assessment: RiskAssessment
+    paper_trade_proposal: PaperTradeProposal
     proposal_preview: str
 
 
@@ -48,6 +63,26 @@ class PhaseBAnalysisEngine:
         confidence = self.probability_engine.aggregate_confidence(estimate, anchors)
         decision = self.edge_detector.evaluate(snapshot, estimate, confidence)
         risk_assessment = self.risk_gateway.assess_snapshot(snapshot, decision.side, estimate.ensemble_yes)
+        paper_side, generation_mode = self._select_paper_side(decision, estimate)
+        entry_price = snapshot.yes_ask if paper_side == "YES" else snapshot.no_ask
+        adjusted_probability = estimate.ensemble_yes if paper_side == "YES" else (1 - estimate.ensemble_yes)
+        risk_decision = self.risk_gateway.assess_trade(
+            bankroll_tracker=self.risk_gateway.tracker,
+            probability_yes=adjusted_probability,
+            entry_price_cents=entry_price,
+            active_exposure=self.risk_gateway.tracker.open_exposure,
+            trials=1000,
+        )
+        paper_trade_proposal = PaperTradeProposal(
+            ticker=snapshot.ticker,
+            side=paper_side,
+            entry_price_cents=entry_price,
+            probability_yes=adjusted_probability,
+            approved_by_risk=risk_decision.approved,
+            proposed_stake=risk_decision.proposed_stake,
+            risk_reasons=risk_decision.fail_safe_reasons,
+            generation_mode=generation_mode,
+        )
         explanation = self._build_explanation(snapshot, estimate, decision, external_payload, risk_assessment)
 
         signal = EVSignal(
@@ -64,6 +99,7 @@ class PhaseBAnalysisEngine:
             edge_decision=decision,
             external_payload=external_payload,
             risk_assessment=risk_assessment,
+            paper_trade_proposal=paper_trade_proposal,
             proposal_preview="",
         )
         proposal_preview = log_trade_proposal(final_result, risk_assessment)
@@ -73,6 +109,7 @@ class PhaseBAnalysisEngine:
             edge_decision=decision,
             external_payload=external_payload,
             risk_assessment=risk_assessment,
+            paper_trade_proposal=paper_trade_proposal,
             proposal_preview=proposal_preview,
         )
 
@@ -82,6 +119,19 @@ class PhaseBAnalysisEngine:
         risk = self.risk_gateway.assess(analysis.signal, snapshot)
         proposal = REGISTRY.create_and_send(analysis.signal, snapshot, risk) if risk.approved else None
         return ProposalResult(analysis=analysis, risk=risk, proposal=proposal)
+
+    @staticmethod
+    def _select_paper_side(decision: EdgeDecision, estimate: ProbabilityEstimate) -> tuple[str, str]:
+        """Select a simulation side.
+
+        In Phase D we still simulate HOLD candidates by using ensemble repricing direction,
+        while preserving strict Phase B live side gating in `edge_decision.side`.
+        """
+        if decision.side in {"YES", "NO"}:
+            return decision.side, "edge_confirmed"
+
+        repricing_side = "YES" if estimate.ensemble_yes >= estimate.market_implied_yes else "NO"
+        return repricing_side, "repricing_fallback"
 
     @staticmethod
     def _build_explanation(
