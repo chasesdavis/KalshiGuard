@@ -46,10 +46,16 @@ python Phase_A/api.py         # start read-only API on :5000 (Phase B analysis e
 
 ## Conflict Resolution Helper (PR sync)
 
-If a PR branch is behind `main` and GitHub shows merge conflicts, run:
+If PR branches are behind `main` and GitHub shows merge conflicts, run:
+
+```bash
+./scripts/resolve-pr-conflicts.sh <branch-1> <branch-2>
+```
+
+For a single branch, the original helper still works:
 
 ```bash
 ./scripts/resolve-pr3-conflicts.sh <your-branch>
 ```
 
-The script fetches `origin`, merges `origin/main` into your branch, runs tests, and pushes when conflict-free. If conflicts occur, it prints the exact next commands to finish manually.
+The helper fetches `origin`, merges `origin/main` into each provided branch, runs tests, and pushes when conflict-free. If conflicts occur, it prints the exact next commands to finish manually.
