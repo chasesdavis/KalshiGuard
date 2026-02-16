@@ -115,18 +115,32 @@ def propose_trade(ticker: str):
 def execute_approved():
     payload = request.get_json(silent=True) or {}
     proposal_id = (payload.get("proposal_id") or "").upper()
-    from_number = payload.get("from_number")
-    incoming_message = payload.get("message")
 
     if not proposal_id:
         return jsonify({"error": "proposal_id is required"}), 400
+
+    if "from_number" in payload or "message" in payload:
+        return jsonify(
+            {
+                "error": (
+                    "Inbound approval message fields are not accepted by this endpoint. "
+                    "Approvals must arrive through the iMessage bridge listener."
+                )
+            }
+        ), 400
 
     proposal = REGISTRY.get(proposal_id)
     if not proposal:
         return jsonify({"error": f"Unknown proposal_id: {proposal_id}"}), 404
 
-    if from_number and incoming_message:
-        REGISTRY.sender.record_incoming_message(from_number=from_number, body=incoming_message)
+    if proposal.status != "PENDING_APPROVAL":
+        return jsonify(
+            {
+                "error": "proposal is not executable in its current state",
+                "proposal_id": proposal_id,
+                "status": proposal.status,
+            }
+        ), 409
 
     approved = REGISTRY.sender.wait_for_trade_approval(
         proposal_id,

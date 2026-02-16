@@ -42,13 +42,13 @@ def test_propose_trade_and_execute_after_whitelisted_approval(monkeypatch):
 
     monkeypatch.setattr(api_module, "ORDER_EXECUTOR", FakeOrderExecutor())
 
+    REGISTRY.sender.record_incoming_message(
+        from_number=Config.IMESSAGE_WHITELIST[0],
+        body=f"APPROVE TRADE ID {proposal_id}",
+    )
     execute_response = client.post(
         "/execute_approved",
-        json={
-            "proposal_id": proposal_id,
-            "from_number": "+17657921945",
-            "message": f"APPROVE TRADE ID {proposal_id}",
-        },
+        json={"proposal_id": proposal_id},
     )
     assert execute_response.status_code == 200
     exec_payload = execute_response.get_json()
@@ -71,14 +71,51 @@ def test_non_whitelist_message_does_not_approve(monkeypatch):
 
     monkeypatch.setattr(api_module, "ORDER_EXECUTOR", FakeOrderExecutor())
 
+    REGISTRY.sender.record_incoming_message(
+        from_number="+15555550123",
+        body=f"APPROVE TRADE ID {proposal_id}",
+    )
     execute_response = client.post(
         "/execute_approved",
-        json={
-            "proposal_id": proposal_id,
-            "from_number": "+15555550123",
-            "message": f"APPROVE TRADE ID {proposal_id}",
-        },
+        json={"proposal_id": proposal_id},
     )
     assert execute_response.status_code == 202
     payload = execute_response.get_json()
     assert payload["status"] == "WAITING_FOR_APPROVAL"
+
+
+def test_execute_approved_rejects_inbound_message_fields(monkeypatch):
+    client = app.test_client()
+    _force_risk_approval(monkeypatch)
+
+    proposal_response = client.post("/propose_trade/FED-RATE-25MAR")
+    proposal_id = proposal_response.get_json()["proposal_id"]
+
+    execute_response = client.post(
+        "/execute_approved",
+        json={
+            "proposal_id": proposal_id,
+            "from_number": Config.IMESSAGE_WHITELIST[0],
+            "message": f"APPROVE TRADE ID {proposal_id}",
+        },
+    )
+    assert execute_response.status_code == 400
+    payload = execute_response.get_json()
+    assert "Inbound approval message fields" in payload["error"]
+
+
+def test_execute_approved_rejects_non_pending_proposals(monkeypatch):
+    client = app.test_client()
+    _force_risk_approval(monkeypatch)
+
+    proposal_response = client.post("/propose_trade/FED-RATE-25MAR")
+    proposal_id = proposal_response.get_json()["proposal_id"]
+    REGISTRY.mark(proposal_id, "EXECUTED")
+
+    execute_response = client.post(
+        "/execute_approved",
+        json={"proposal_id": proposal_id},
+    )
+    assert execute_response.status_code == 409
+    payload = execute_response.get_json()
+    assert payload["status"] == "EXECUTED"
