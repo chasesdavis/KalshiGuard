@@ -13,7 +13,7 @@ Codex Cloud integration reads `CODEX_API_KEY` from environment — no secrets in
 | `Phase_B/` | **Analysis Engine** — EV calculation, edge detection, multi-source probability models | ✅ Implemented (read-only) |
 | `Phase_C/` | **Risk Management** — Position sizing, fractional Kelly, Monte Carlo stress tests, fail-safes | 🔜 Stub |
 | `Phase_D/` | **Paper Trading** — Simulated execution, backtesting harness (≥100 trades before live) | 🔜 Stub |
-| `Phase_E/` | **Live Trading** — Human-approved order execution via iMessage (mandatory until $200+) | 🔜 Stub |
+| `Phase_E/` | **Live Trading** — Human-approved order execution via iMessage (mandatory for every trade) | ✅ Implemented |
 | `Phase_F/` | **Learning & Self-Improvement** — Offline model retraining, governance, versioned rollback | 🔜 Stub |
 | `Phase_G/` | **iOS Companion App** — SwiftUI dashboard, WidgetKit, live PnL, glassmorphism UI | 🔜 Stub |
 | `Phase_H/` | **Deployment & Monitoring** — Production hardening, 24/7 ops, alerting, audit logs | 🔜 Stub |
@@ -26,7 +26,7 @@ Codex Cloud integration reads `CODEX_API_KEY` from environment — no secrets in
 cd KalshiGuard
 pip install -r requirements.txt
 cp .env.example .env          # add your keys here (never commit .env)
-python Phase_A/api.py         # start read-only API on :5000 (Phase B analysis enabled)
+python Phase_A/api.py         # start API on :5000 (Phase B analysis + Phase E approval-gated flow)
 ```
 
 ## Environment Variables
@@ -36,10 +36,14 @@ python Phase_A/api.py         # start read-only API on :5000 (Phase B analysis e
 | `CODEX_API_KEY` | Optional | Codex Cloud code-generation calls |
 | `KALSHI_API_KEY` | Phase E+ | Kalshi API authentication |
 | `KALSHI_API_SECRET` | Phase E+ | Kalshi API secret |
+| `BLUEBUBBLES_SERVER_URL` | Optional | BlueBubbles server base URL |
+| `OPENCLAW_API_KEY` | Optional | OpenClaw auth token for iMessage send bridge |
+| `OPENCLAW_SEND_PATH` | Optional | OpenClaw send endpoint path (default `/openclaw/imessage/send`) |
+| `APPROVAL_WAIT_TIMEOUT_SECONDS` | Optional | Wait timeout for approval polling (default 60) |
 
 ## Rules (Non-Negotiable)
 
 1. **Capital preservation > profit.** Every cent of the $50 is sacred.
-2. **No live trades without iMessage approval** from whitelisted number.
+2. **No live trades without iMessage approval** from whitelisted number (+17657921945) on every trade.
 3. **No secrets in code.** Environment variables only.
 4. **Read-only first.** Each phase unlocks incrementally after validation.

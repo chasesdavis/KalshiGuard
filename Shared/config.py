@@ -23,6 +23,14 @@ class Config:
     KALSHI_API_SECRET = os.getenv("KALSHI_API_SECRET")
     KALSHI_ENV = os.getenv("KALSHI_ENV", "DEMO")
 
+    # Approval wait loop
+    APPROVAL_WAIT_TIMEOUT_SECONDS = int(os.getenv("APPROVAL_WAIT_TIMEOUT_SECONDS", "60"))
+
+    # Optional BlueBubbles/OpenClaw iMessage bridge transport
+    BLUEBUBBLES_SERVER_URL = os.getenv("BLUEBUBBLES_SERVER_URL")
+    OPENCLAW_API_KEY = os.getenv("OPENCLAW_API_KEY")
+    OPENCLAW_SEND_PATH = os.getenv("OPENCLAW_SEND_PATH", "/openclaw/imessage/send")
+
     # Bankroll constraints
     BANKROLL_START = 50.00
     MAX_TRADE_RISK = 0.50
