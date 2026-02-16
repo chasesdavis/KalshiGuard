@@ -49,22 +49,25 @@ class PhaseFModelRetrainer:
         artifact_path = self.artifacts_dir / f"retrain_{timestamp}.json"
         write_training_artifact(artifact_path, result)
 
-        self.engine.apply_retrained_weights(
-            weights=result.weights,
-            calibration_bias=result.calibration_bias,
-            calibration_temperature=result.calibration_temperature,
-            metadata={
-                "sample_count": result.sample_count,
-                "old_brier": result.old_brier,
-                "new_brier": result.new_brier,
-                "timestamp": timestamp,
-            },
-        )
+        status = "updated" if result.new_brier <= result.old_brier else "review_required"
+
+        if status == "updated":
+            self.engine.apply_retrained_weights(
+                weights=result.weights,
+                calibration_bias=result.calibration_bias,
+                calibration_temperature=result.calibration_temperature,
+                metadata={
+                    "sample_count": result.sample_count,
+                    "old_brier": result.old_brier,
+                    "new_brier": result.new_brier,
+                    "timestamp": timestamp,
+                },
+            )
 
         codex_summary = self._codex_review(result)
 
         return RetrainReport(
-            status="updated" if result.new_brier <= result.old_brier else "review_required",
+            status=status,
             sample_count=result.sample_count,
             old_brier=result.old_brier,
             new_brier=result.new_brier,

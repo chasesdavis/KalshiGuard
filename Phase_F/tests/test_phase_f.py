@@ -103,3 +103,59 @@ def test_model_retrainer_runs_with_empty_db(tmp_path: Path):
 
     assert report.sample_count == 0
     assert Path(report.artifact_path).exists()
+
+
+def test_model_retrainer_skips_persist_on_regression(tmp_path: Path):
+    db_path = tmp_path / "empty.db"
+    import sqlite3
+
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "CREATE TABLE price_snapshots (id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT, timestamp TEXT, yes_bid REAL, yes_ask REAL, no_bid REAL, no_ask REAL, volume INTEGER, open_interest INTEGER)"
+    )
+    conn.commit()
+    conn.close()
+
+    weights_path = tmp_path / "weights.json"
+    engine = ProbabilityEngine(weights_path=weights_path)
+    engine.apply_retrained_weights(
+        weights={
+            "market_implied_yes": 0.55,
+            "external_yes": 0.2,
+            "bayesian_yes": 0.15,
+            "internal_yes": 0.1,
+        },
+        calibration_bias=0.02,
+        calibration_temperature=1.03,
+        metadata={"status": "baseline"},
+    )
+
+    retrainer = PhaseFModelRetrainer(
+        db_path=str(db_path),
+        weights_path=weights_path,
+        artifacts_dir=tmp_path / "artifacts",
+    )
+
+    retrainer.trainer.train = lambda samples, baseline: type("R", (), {
+        "sample_count": 5,
+        "old_brier": 0.2,
+        "new_brier": 0.25,
+        "weights": {
+            "market_implied_yes": 0.1,
+            "external_yes": 0.2,
+            "bayesian_yes": 0.3,
+            "internal_yes": 0.4,
+        },
+        "calibration_bias": -0.04,
+        "calibration_temperature": 1.2,
+        "notes": "degraded",
+    })()
+    retrainer.codex_client.generate_text = lambda *args, **kwargs: "ok"
+
+    report = retrainer.retrain()
+    status = ProbabilityEngine(weights_path=weights_path).get_retrain_status()
+
+    assert report.status == "review_required"
+    assert status["weights"]["market_implied_yes"] == 0.55
+    assert status["calibration_bias"] == 0.02
+    assert Path(report.artifact_path).exists()
