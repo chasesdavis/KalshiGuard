@@ -18,11 +18,17 @@ class BankrollTracker:
         self.trade_count = 0
 
     def apply_pnl(self, pnl_dollars: float) -> None:
-        self.current_bankroll = round(self.current_bankroll + pnl_dollars, 4)
+        self.current_bankroll = round(max(0.0, self.current_bankroll + pnl_dollars), 4)
         self.peak_bankroll = max(self.peak_bankroll, self.current_bankroll)
         self.daily_pnl = round(self.daily_pnl + pnl_dollars, 4)
         self.weekly_pnl = round(self.weekly_pnl + pnl_dollars, 4)
         self.trade_count += 1
+
+    def reset_daily(self) -> None:
+        self.daily_pnl = 0.0
+
+    def reset_weekly(self) -> None:
+        self.weekly_pnl = 0.0
 
     @property
     def max_drawdown_abs(self) -> float:

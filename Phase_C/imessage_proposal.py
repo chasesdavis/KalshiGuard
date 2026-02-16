@@ -20,10 +20,11 @@ class IMessageProposal:
 
 def log_proposal(proposal: IMessageProposal) -> None:
     """Persist proposal to logs pending Phase E transport integration."""
+    rationale_headline = proposal.rationale.splitlines()[0] if proposal.rationale else ""
     logger.info(
         "IMESSAGE_PROPOSAL_STUB ticker=%s side=%s stake=%.2f rationale=%s",
         proposal.ticker,
         proposal.side,
         proposal.stake_dollars,
-        proposal.rationale,
+        rationale_headline,
     )

@@ -38,6 +38,7 @@ class RiskGateway:
     ) -> RiskAssessment:
         kelly_result = self.kelly.size_position(bankroll_tracker.current_bankroll, probability_yes, entry_price_cents)
         fail_safe = self.fail_safes.evaluate(bankroll_tracker, kelly_result.recommended_stake, active_exposure=active_exposure)
+
         stress_result = self.stress.run(
             probability_yes=probability_yes,
             stake_dollars=kelly_result.recommended_stake,
@@ -46,7 +47,7 @@ class RiskGateway:
             starting_bankroll=bankroll_tracker.current_bankroll,
         )
 
-        approved = fail_safe.allowed and stress_result.passed and kelly_result.recommended_stake > 0
+        approved = fail_safe.allowed and stress_result.passed
         return RiskAssessment(
             approved=approved,
             proposed_stake=kelly_result.recommended_stake,

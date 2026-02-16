@@ -16,6 +16,7 @@ from Phase_D.backtest_harness import BacktestHarness
 from Phase_D.demo_connector import DemoKalshiConnector
 from Shared.bankroll_tracker import BankrollTracker
 from Shared.config import Config
+from Shared.models import PriceSnapshot
 from Shared.logging_utils import configure_logging
 
 configure_logging()
@@ -115,7 +116,7 @@ def paper_trade_sim(ticker: str):
     if not snap:
         return jsonify({"error": f"No baseline snapshot for ticker: {ticker}"}), 404
 
-    sim_snapshot = type(snap)(
+    sim_snapshot = PriceSnapshot(
         ticker=snap.ticker,
         timestamp=snap.timestamp,
         yes_ask=payload["yes_ask"],

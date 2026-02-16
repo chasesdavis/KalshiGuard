@@ -21,22 +21,22 @@ def simulate_binary_contract(
     starting_bankroll: float = 50.0,
     seed: int = 7,
 ) -> MonteCarloSummary:
-    """Run binary payout simulations for a contract buying one side at entry price.
+    """Run binary payout simulations for a contract buying one side at entry price."""
+    if trials <= 0:
+        raise ValueError("trials must be > 0")
+    if stake_dollars <= 0 or entry_price_cents <= 0 or entry_price_cents >= 100:
+        return MonteCarloSummary(ruin_probability=1.0, average_pnl=0.0, percentile_05_pnl=0.0, percentile_95_pnl=0.0)
 
-    Returns summary on PnL outcomes for stake-sized position equivalent.
-    """
     rng = random.Random(seed)
     outcomes: list[float] = []
 
-    if stake_dollars <= 0:
-        return MonteCarloSummary(ruin_probability=0.0, average_pnl=0.0, percentile_05_pnl=0.0, percentile_95_pnl=0.0)
-
-    contracts = stake_dollars / max(entry_price_cents / 100.0, 0.01)
+    prob_yes = min(max(probability_yes, 0.0), 1.0)
+    contracts = stake_dollars / (entry_price_cents / 100.0)
     per_contract_win = (100 - entry_price_cents) / 100.0
     per_contract_loss = entry_price_cents / 100.0
 
     for _ in range(trials):
-        yes_occurs = rng.random() < probability_yes
+        yes_occurs = rng.random() < prob_yes
         pnl = contracts * per_contract_win if yes_occurs else -contracts * per_contract_loss
         outcomes.append(round(pnl, 6))
 

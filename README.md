@@ -26,7 +26,7 @@ Codex Cloud integration reads `CODEX_API_KEY` from environment — no secrets in
 cd KalshiGuard
 pip install -r requirements.txt
 cp .env.example .env          # add your keys here (never commit .env)
-python Phase_A/api.py         # start read-only API on :5000 (Phase B analysis enabled)
+python Phase_A/api.py         # start API on :5000 (Phase D paper simulation enabled)
 ```
 
 ## Environment Variables
