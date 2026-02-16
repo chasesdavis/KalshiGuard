@@ -115,8 +115,6 @@ def propose_trade(ticker: str):
 def execute_approved():
     payload = request.get_json(silent=True) or {}
     proposal_id = (payload.get("proposal_id") or "").upper()
-    from_number = payload.get("from_number")
-    incoming_message = payload.get("message")
 
     if not proposal_id:
         return jsonify({"error": "proposal_id is required"}), 400
@@ -125,8 +123,8 @@ def execute_approved():
     if not proposal:
         return jsonify({"error": f"Unknown proposal_id: {proposal_id}"}), 404
 
-    if from_number and incoming_message:
-        REGISTRY.sender.record_incoming_message(from_number=from_number, body=incoming_message)
+    if proposal.status == "EXECUTED":
+        return jsonify({"error": "Proposal already executed", "proposal_id": proposal_id}), 409
 
     approved = REGISTRY.sender.wait_for_trade_approval(
         proposal_id,
