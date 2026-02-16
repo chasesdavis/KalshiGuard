@@ -1,20 +1,32 @@
 # Phase F — Learning & Self-Improvement 🧬
 
-**Status:** 🔜 Planned (unlocks after Phase E live track record)
+**Status:** ✅ Implemented (offline-only, risk-first)
 
-## What This Phase Will Do
-- Offline model retraining on accumulated trade data
-- Weekly backtest of new strategy ideas
-- Versioned model governance: every update tested + approved before deployment
-- Rollback capability to last-known-good model
-- Optional Codex Cloud integration for code optimization
-- Retrain cadence: weekly (configurable)
+## What Phase F Adds
 
-## Depends On
-- Phase E (live trade data needed for meaningful retraining)
-- Sufficient historical data (≥3 months of live signals)
+Phase F introduces controlled, auditable learning that improves model calibration **without touching live execution logic**.
 
-## Key Files (to be created)
-- `trainer.py` — Offline model retraining pipeline
-- `model_registry.py` — Versioned model storage + rollback
-- `governance.py` — Approval workflow for model updates
+### 1) Offline Model Retraining
+- `Phase_F/model_retrainer.py` reads historical `price_snapshots` from SQLite.
+- Builds weakly supervised labels from next-snapshot movement.
+- Calls `Shared/model_trainer.py` for lightweight retraining (ridge-regularized reweighting + conservative calibration).
+- Stores JSON artifacts in `Phase_F/artifacts/` and updates `Phase_B` ensemble weights via retrain hooks.
+
+### 2) Governance & Weekly Self-Review
+- `Phase_F/governance_engine.py` computes rolling performance and max drawdown from `trade_signals`.
+- `Shared/governance.py` turns performance into conservative parameter changes.
+- `Phase_C/risk_gateway.py` applies the governance output as a Kelly scaling factor (`kelly_scale_factor`).
+
+### 3) Versioned Rollback
+- `Phase_F/version_rollback.py` tracks model versions with git commit metadata.
+- Registry is stored at `Phase_F/artifacts/model_registry.json`.
+- Includes rollback simulation output (dry-run git checkout command).
+
+## API Endpoints
+- `GET /retrain_models`: triggers retraining, returns metrics + registered version.
+- `GET /self_review`: runs governance review, returns risk adjustments.
+
+## Safety Constraints
+- Offline only; no live order flow changes.
+- Capital-preservation bias in training and governance tuning.
+- All secrets remain env-based (`CODEX_API_KEY` only via `Shared/codex_client.py`).
