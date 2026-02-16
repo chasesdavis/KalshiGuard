@@ -11,14 +11,14 @@ Codex Cloud integration reads `CODEX_API_KEY` from environment — no secrets in
 |--------|---------|--------|
 | `Phase_A/` | **Data Collection** — Read-only Kalshi data fetcher, models, SQLite logging, Flask API, `/explain_trade` | ✅ Scaffolded |
 | `Phase_B/` | **Analysis Engine** — EV calculation, edge detection, multi-source probability models | ✅ Implemented (read-only) |
-| `Phase_C/` | **Risk Management** — Position sizing, fractional Kelly, Monte Carlo stress tests, fail-safes | 🔜 Stub |
+| `Phase_C/` | **Risk Management** — Position sizing, fractional Kelly, Monte Carlo stress tests, fail-safes | ✅ Implemented (read-only) |
 | `Phase_D/` | **Paper Trading** — Simulated execution, backtesting harness (≥100 trades before live) | 🔜 Stub |
-| `Phase_E/` | **Live Trading** — Human-approved order execution via iMessage (mandatory for every trade) | ✅ Implemented |
-| `Phase_F/` | **Learning & Self-Improvement** — Offline model retraining, governance, versioned rollback | 🔜 Stub |
-| `Phase_G/` | **iOS Companion App** — SwiftUI dashboard, WidgetKit, live PnL, glassmorphism UI | 🔜 Stub |
+| `Phase_E/` | **Live Trading** — Human-approved order execution via iMessage (mandatory until $200+) | 🔜 Stub |
+| `Phase_F/` | **Learning & Self-Improvement** — Offline model retraining, governance, versioned rollback | ✅ Implemented (offline) |
+| `Phase_G/` | **iOS Companion App** — SwiftUI dashboard, WidgetKit, live PnL, glassmorphism UI | ✅ Implemented |
 | `Phase_H/` | **Deployment & Monitoring** — Production hardening, 24/7 ops, alerting, audit logs | 🔜 Stub |
 | `Shared/` | **Common utilities** — Models, config, Codex client, env loading | ✅ Scaffolded |
-| `scripts/` | **Helpers** — Setup, Flask launcher, dashboard check | ✅ Scaffolded |
+| `scripts/` | **Helpers** — Setup, Flask launcher, dashboard check, merge-conflict helper | ✅ Scaffolded |
 
 ## Quick Start
 
@@ -36,10 +36,7 @@ python Phase_A/api.py         # start read-only API on :5000 (Phase B analysis e
 | `CODEX_API_KEY` | Optional | Codex Cloud code-generation calls |
 | `KALSHI_API_KEY` | Phase E+ | Kalshi API authentication |
 | `KALSHI_API_SECRET` | Phase E+ | Kalshi API secret |
-| `BLUEBUBBLES_SERVER_URL` | Optional | BlueBubbles server base URL |
-| `OPENCLAW_API_KEY` | Optional | OpenClaw auth token for iMessage send bridge |
-| `OPENCLAW_SEND_PATH` | Optional | OpenClaw send endpoint path (default `/openclaw/imessage/send`) |
-| `APPROVAL_WAIT_TIMEOUT_SECONDS` | Optional | Wait timeout for approval polling (default 60) |
+| `IOS_DASHBOARD_TOKEN` | Phase G | Token auth between iOS dashboard/widget and Flask API |
 
 ## Rules (Non-Negotiable)
 
@@ -47,3 +44,32 @@ python Phase_A/api.py         # start read-only API on :5000 (Phase B analysis e
 2. **No live trades without iMessage approval** from whitelisted number (+17657921945) on every trade.
 3. **No secrets in code.** Environment variables only.
 4. **Read-only first.** Each phase unlocks incrementally after validation.
+
+## Conflict Resolution Helper (PR sync)
+
+If PR branches are behind `main` and GitHub shows merge conflicts, run:
+
+```bash
+./scripts/resolve-pr-conflicts.sh <branch-1> <branch-2>
+```
+
+You can also pass a PR number or GitHub PR URL directly:
+
+```bash
+./scripts/resolve-pr-conflicts.sh 4
+./scripts/resolve-pr-conflicts.sh https://github.com/chasesdavis/KalshiGuard/pull/4/conflicts
+```
+
+Or run with no arguments to auto-detect local unpushed PR branches (`codex/pr-*`):
+
+```bash
+./scripts/resolve-pr-conflicts.sh
+```
+
+For a single branch, the original helper still works:
+
+```bash
+./scripts/resolve-pr3-conflicts.sh <your-branch>
+```
+
+The helper fetches `origin`, merges `origin/main` into each provided branch, runs tests, and pushes when conflict-free. If conflicts occur, it prints the exact next commands to finish manually.

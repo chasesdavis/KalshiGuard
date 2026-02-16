@@ -1,66 +1,41 @@
-"""Proposal management that bridges analysis/risk to iMessage approval and execution."""
+"""Phase C iMessage proposal formatter (logging-only stub)."""
 from __future__ import annotations
 
-import uuid
-from dataclasses import dataclass
+import logging
+from typing import Any
 
-from Phase_C.risk_gateway import RiskDecision
-from Phase_E.imessage_sender import IMessageSender
+from Phase_C.risk_gateway import RiskAssessment
 from Shared.config import Config
-from Shared.models import EVSignal, PriceSnapshot
+
+logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class TradeProposal:
-    proposal_id: str
-    ticker: str
-    side: str
-    contracts: int
-    max_risk_dollars: float
-    status: str
-    message: str
+def format_trade_proposal(analysis_result: Any, risk_assessment: RiskAssessment) -> str:
+    """Build a human-readable proposal payload for future iMessage approval flow."""
+
+    signal = analysis_result.signal
+    decision = analysis_result.edge_decision
+    stress = risk_assessment.stress_test
+
+    return (
+        f"[PROPOSAL ONLY — NO SEND]\n"
+        f"Ticker: {signal.ticker}\n"
+        f"Side: {signal.side}\n"
+        f"EV: {signal.ev_percent:.2f}% | Confidence: {signal.confidence:.4f}\n"
+        f"Confirmations: {decision.confirmation_count} ({', '.join(decision.confirmations) or 'none'})\n"
+        f"Risk: ${risk_assessment.sizing.recommended_risk:.2f} "
+        f"(Kelly applied {risk_assessment.sizing.kelly_fraction_applied:.4f})\n"
+        f"Stress (n={stress.simulations}): ruin_prob={stress.ruin_probability:.2%}, "
+        f"P5=${stress.p5_terminal:.2f}, P50=${stress.p50_terminal:.2f}, P95=${stress.p95_terminal:.2f}\n"
+        f"Fail-safe approved: {risk_assessment.fail_safe_report.approved}\n"
+        f"Whitelisted approvers configured: {len(Config.IMESSAGE_WHITELIST)}\n"
+        f"Blockers: {', '.join(risk_assessment.blockers) or 'none'}"
+    )
 
 
-class ProposalRegistry:
-    """In-memory proposal registry used by API execution endpoints."""
+def log_trade_proposal(analysis_result: Any, risk_assessment: RiskAssessment) -> str:
+    """Log proposal only; sending is intentionally disabled until a later phase."""
 
-    def __init__(self) -> None:
-        self._store: dict[str, TradeProposal] = {}
-        self.sender = IMessageSender()
-
-    def create_and_send(self, signal: EVSignal, snapshot: PriceSnapshot, risk: RiskDecision) -> TradeProposal:
-        proposal_id = str(uuid.uuid4()).upper()
-        msg = (
-            f"[KalshiGuard | Balance: ${Config.BANKROLL_START:.2f}]\n"
-            f"TRADE ID {proposal_id}\n"
-            f"Ticker: {snapshot.ticker}\n"
-            f"Side: {signal.side}\n"
-            f"Contracts: {risk.max_contracts}\n"
-            f"Risk: ${risk.estimated_risk_dollars:.2f}\n"
-            f"EV: {signal.ev_percent:.2f}% | Confidence: {signal.confidence:.3f}\n"
-            f"Reply exactly: APPROVE TRADE ID {proposal_id}"
-        )
-        self.sender.send_trade_proposal(Config.IMESSAGE_WHITELIST[0], msg)
-        proposal = TradeProposal(
-            proposal_id=proposal_id,
-            ticker=snapshot.ticker,
-            side=signal.side,
-            contracts=risk.max_contracts,
-            max_risk_dollars=risk.estimated_risk_dollars,
-            status="PENDING_APPROVAL",
-            message=msg,
-        )
-        self._store[proposal_id] = proposal
-        return proposal
-
-    def get(self, proposal_id: str) -> TradeProposal | None:
-        return self._store.get(proposal_id)
-
-    def mark(self, proposal_id: str, status: str) -> TradeProposal:
-        proposal = self._store[proposal_id]
-        updated = TradeProposal(**{**proposal.__dict__, "status": status})
-        self._store[proposal_id] = updated
-        return updated
-
-
-REGISTRY = ProposalRegistry()
+    proposal = format_trade_proposal(analysis_result, risk_assessment)
+    logger.info("iMessage proposal stub generated:\n%s", proposal)
+    return proposal
