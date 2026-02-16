@@ -4,6 +4,7 @@ set -euo pipefail
 # Resolve merge conflicts for one or more feature branches by merging latest main.
 # Usage:
 #   ./scripts/resolve-pr-conflicts.sh <feature-branch> [feature-branch...]
+#   ./scripts/resolve-pr-conflicts.sh
 #
 # Example (two remaining PR branches):
 #   ./scripts/resolve-pr-conflicts.sh codex/pr-3 codex/pr-4
@@ -18,14 +19,38 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 
-if ! git remote get-url origin >/dev/null 2>&1; then
-  echo "❌ Missing 'origin' remote." >&2
-  exit 1
+discover_unpushed_branches() {
+  local branch
+  local ahead_count
+
+  while IFS= read -r branch; do
+    # Focus this helper on PR branches only.
+    [[ "${branch}" =~ ^codex/pr- ]] || continue
+
+    if ! git show-ref --verify --quiet "refs/remotes/origin/${branch}"; then
+      echo "${branch}"
+      continue
+    fi
+
+    ahead_count="$(git rev-list --count "origin/${branch}..${branch}")"
+    if [[ "${ahead_count}" -gt 0 ]]; then
+      echo "${branch}"
+    fi
+  done < <(git for-each-ref --format='%(refname:short)' refs/heads)
+}
+
+if [[ "$#" -eq 0 ]]; then
+  mapfile -t auto_branches < <(discover_unpushed_branches)
+  if [[ "${#auto_branches[@]}" -eq 0 ]]; then
+    echo "ℹ️ No local unpushed PR branches found (pattern: codex/pr-*)."
+    exit 0
+  fi
+  set -- "${auto_branches[@]}"
+  echo "➡️ Auto-detected unpushed PR branches: $*"
 fi
 
-if [[ "$#" -lt 1 ]]; then
-  echo "❌ Provide at least one branch name." >&2
-  echo "Usage: ./scripts/resolve-pr-conflicts.sh <feature-branch> [feature-branch...]" >&2
+if ! git remote get-url origin >/dev/null 2>&1; then
+  echo "❌ Missing 'origin' remote; cannot sync PR branches to GitHub." >&2
   exit 1
 fi
 

@@ -52,6 +52,12 @@ If PR branches are behind `main` and GitHub shows merge conflicts, run:
 ./scripts/resolve-pr-conflicts.sh <branch-1> <branch-2>
 ```
 
+Or run with no arguments to auto-detect local unpushed PR branches (`codex/pr-*`):
+
+```bash
+./scripts/resolve-pr-conflicts.sh
+```
+
 For a single branch, the original helper still works:
 
 ```bash
