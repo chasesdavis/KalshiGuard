@@ -11,7 +11,7 @@ Codex Cloud integration reads `CODEX_API_KEY` from environment — no secrets in
 |--------|---------|--------|
 | `Phase_A/` | **Data Collection** — Read-only Kalshi data fetcher, models, SQLite logging, Flask API, `/explain_trade` | ✅ Scaffolded |
 | `Phase_B/` | **Analysis Engine** — EV calculation, edge detection, multi-source probability models | ✅ Implemented (read-only) |
-| `Phase_C/` | **Risk Management** — Position sizing, fractional Kelly, Monte Carlo stress tests, fail-safes | 🔜 Stub |
+| `Phase_C/` | **Risk Management** — Position sizing, fractional Kelly, Monte Carlo stress tests, fail-safes | ✅ Implemented (read-only) |
 | `Phase_D/` | **Paper Trading** — Simulated execution, backtesting harness (≥100 trades before live) | 🔜 Stub |
 | `Phase_E/` | **Live Trading** — Human-approved order execution via iMessage (mandatory until $200+) | 🔜 Stub |
 | `Phase_F/` | **Learning & Self-Improvement** — Offline model retraining, governance, versioned rollback | 🔜 Stub |

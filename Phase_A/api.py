@@ -1,4 +1,4 @@
-"""KalshiGuard API — read-only data endpoints plus Phase B analysis explanation."""
+"""KalshiGuard API — read-only data endpoints, analysis explanation, and risk assessment."""
 from __future__ import annotations
 
 import os
@@ -24,12 +24,14 @@ def status():
     return jsonify(
         {
             "status": "ONLINE",
-            "phase": "B (Analysis Engine active; read-only execution)",
+            "phase": "C (Risk Management active; read-only execution)",
             "bankroll": Config.BANKROLL_START,
             "max_risk_per_trade": Config.MAX_TRADE_RISK,
+            "max_total_exposure": Config.MAX_TOTAL_EXPOSURE,
             "live_trading": False,
             "min_ev_threshold": Config.MIN_EV_THRESHOLD,
             "min_confirmations": Config.MIN_CONFIRMATIONS,
+            "stress_simulations": Config.MONTE_CARLO_SIMS,
         }
     )
 
@@ -70,9 +72,54 @@ def explain_trade(ticker: str):
             "confirmations": result.edge_decision.confirmations,
             "confirmation_count": result.edge_decision.confirmation_count,
             "risk_checks": result.edge_decision.threshold_checks,
-            "action": "NO ACTION (Phase B analysis only — execution disabled)",
+            "risk_assessment": _serialize_risk(result.risk_assessment),
+            "proposal_preview": result.proposal_preview,
+            "action": "NO ACTION (Phase C risk + analysis only — execution disabled)",
         }
     )
+
+
+@app.route("/risk_assessment/<ticker>")
+def risk_assessment(ticker: str):
+    """Return Phase C pre-trade risk output for one ticker."""
+    snapshots = {s.ticker: s for s in fetch_price_snapshots()}
+    snap = snapshots.get(ticker)
+    if not snap:
+        return jsonify({"error": f"No data for ticker: {ticker}"}), 404
+
+    result = analyze_snapshot_with_context(snap)
+    return jsonify({"ticker": ticker, "risk_assessment": _serialize_risk(result.risk_assessment), "read_only": True})
+
+
+def _serialize_risk(risk) -> dict:
+    return {
+        "approved": risk.approved,
+        "blockers": risk.blockers,
+        "bankroll": risk.bankroll,
+        "buying_power": risk.buying_power,
+        "sizing": {
+            "recommended_risk": risk.sizing.recommended_risk,
+            "kelly_fraction_raw": risk.sizing.kelly_fraction_raw,
+            "kelly_fraction_applied": risk.sizing.kelly_fraction_applied,
+            "max_risk_cap": risk.sizing.max_risk_cap,
+            "exposure_cap_remaining": risk.sizing.exposure_cap_remaining,
+            "rationale": risk.sizing.rationale,
+        },
+        "fail_safes": {
+            "approved": risk.fail_safe_report.approved,
+            "checks": risk.fail_safe_report.checks,
+            "reasons": risk.fail_safe_report.reasons,
+        },
+        "stress_test": {
+            "simulations": risk.stress_test.simulations,
+            "steps": risk.stress_test.steps,
+            "ruin_probability": risk.stress_test.ruin_probability,
+            "p5_terminal": risk.stress_test.p5_terminal,
+            "p50_terminal": risk.stress_test.p50_terminal,
+            "p95_terminal": risk.stress_test.p95_terminal,
+            "pass_threshold": risk.stress_test.pass_threshold,
+        },
+    }
 
 
 if __name__ == "__main__":
