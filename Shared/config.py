@@ -25,6 +25,18 @@ class Config:
     DEMO_KALSHI_API_SECRET = os.getenv("DEMO_KALSHI_API_SECRET")
     KALSHI_ENV = os.getenv("KALSHI_ENV", "DEMO")
     IOS_DASHBOARD_TOKEN = os.getenv("IOS_DASHBOARD_TOKEN")
+    APP_ENV = os.getenv("APP_ENV", "development")
+
+    # Phase H monitoring and deployment
+    AUDIT_DB_PATH = os.getenv(
+        "AUDIT_DB_PATH",
+        str(Path(__file__).resolve().parent.parent / "phase_h_audit.db"),
+    )
+    ALERT_CHANNELS = [c.strip() for c in os.getenv("ALERT_CHANNELS", "imessage,telegram").split(",") if c.strip()]
+    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+    TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+    HEALTH_ERROR_STREAK_RESTART = int(os.getenv("HEALTH_ERROR_STREAK_RESTART", "3"))
+    HEALTH_LOG_RETENTION_DAYS = int(os.getenv("HEALTH_LOG_RETENTION_DAYS", "30"))
 
     # Approval wait loop
     APPROVAL_WAIT_TIMEOUT_SECONDS = int(os.getenv("APPROVAL_WAIT_TIMEOUT_SECONDS", "60"))

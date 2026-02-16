@@ -142,3 +142,29 @@ def test_execute_approved_stub_requires_approved_flag():
         assert accepted.get_json()["executed"] is False
     finally:
         api.Config.IOS_DASHBOARD_TOKEN = previous
+
+
+def test_health_endpoint():
+    client = app.test_client()
+    response = client.get("/health")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["status"] == "ok"
+    assert "uptime_seconds" in payload
+    assert "restart_recommended" in payload
+
+
+def test_logs_endpoint_returns_audit_events():
+    client = app.test_client()
+    api.AUDIT_LOGGER.log_event(
+        component="api",
+        event_type="test_log",
+        severity="info",
+        message="log endpoint test",
+        payload={"source": "test"},
+    )
+    response = client.get("/logs?limit=10&component=api")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["count"] >= 1
+    assert isinstance(payload["events"], list)

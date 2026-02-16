@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
 from flask import Flask, jsonify, request
+from werkzeug.exceptions import HTTPException
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -16,6 +18,9 @@ from Phase_C.imessage_proposal import REGISTRY
 from Phase_D.backtest_harness import BacktestHarness
 from Phase_F.model_retrainer import PhaseFModelRetrainer
 from Phase_F.version_rollback import VersionRollbackManager
+from Phase_H.alerting_system import DrawdownSnapshot, PhaseHAlertingSystem
+from Phase_H.audit_logger import get_audit_logger
+from Phase_H.deployment_manager import PhaseHDeploymentManager
 from Shared.config import Config
 from Shared.logging_utils import configure_logging
 from Shared.order_executor import OrderExecutor, OrderRequest
@@ -27,6 +32,10 @@ ORDER_EXECUTOR = OrderExecutor()
 
 MODEL_RETRAINER = PhaseFModelRetrainer()
 ROLLBACK_MANAGER = VersionRollbackManager()
+AUDIT_LOGGER = get_audit_logger()
+PHASE_H_DEPLOYMENT = PhaseHDeploymentManager(repo_root=Path(__file__).resolve().parent.parent, audit_logger=AUDIT_LOGGER)
+PHASE_H_ALERTING = PhaseHAlertingSystem(audit_logger=AUDIT_LOGGER)
+PHASE_H_DEPLOYMENT.ensure_assets()
 
 
 @app.route("/status")
@@ -42,6 +51,46 @@ def status():
             "min_ev_threshold": Config.MIN_EV_THRESHOLD,
             "min_confirmations": Config.MIN_CONFIRMATIONS,
             "stress_simulations": Config.MONTE_CARLO_SIMS,
+        }
+    )
+
+
+@app.route("/health")
+def health():
+    """Production health snapshot for uptime monitors and orchestrators."""
+    snapshot = PHASE_H_DEPLOYMENT.health_snapshot()
+    AUDIT_LOGGER.log_event(
+        component="api",
+        event_type="health_check",
+        severity="info",
+        message="Health endpoint queried",
+        payload={"uptime_seconds": snapshot.uptime_seconds, "error_streak": snapshot.error_streak},
+    )
+    return jsonify(
+        {
+            "status": "ok",
+            "environment": Config.APP_ENV,
+            "uptime_seconds": snapshot.uptime_seconds,
+            "started_at": snapshot.app_started_at,
+            "error_streak": snapshot.error_streak,
+            "restart_recommended": snapshot.restart_recommended,
+            "audit_db_path": Config.AUDIT_DB_PATH,
+        }
+    )
+
+
+@app.route("/logs")
+def logs():
+    """Query structured audit logs."""
+    limit = int(request.args.get("limit", "100"))
+    component = request.args.get("component")
+    severity = request.args.get("severity")
+    since = request.args.get("since")
+    events = AUDIT_LOGGER.query_events(limit=limit, component=component, severity=severity, since=since)
+    return jsonify(
+        {
+            "count": len(events),
+            "events": [event.__dict__ for event in events],
         }
     )
 
@@ -247,6 +296,13 @@ def execute_approved():
     )
     result = ORDER_EXECUTOR.place_order(request_obj)
     REGISTRY.mark(proposal_id, "EXECUTED")
+    AUDIT_LOGGER.log_event(
+        component="api",
+        event_type="order_executed",
+        severity="info",
+        message=f"Executed approved proposal {proposal_id}",
+        payload={"proposal_id": proposal_id, "order_id": result.order_id, "order_status": result.status},
+    )
 
     return jsonify(
         {
@@ -267,8 +323,27 @@ def propose_trade(ticker: str):
 
     result = propose_trade_with_context(snap)
     if result.proposal is None:
+        AUDIT_LOGGER.log_event(
+            component="api",
+            event_type="proposal_rejected",
+            severity="warning",
+            message=f"Proposal rejected by risk for {ticker}",
+            payload={"ticker": ticker, "reason": result.risk.reason},
+        )
         return jsonify({"status": "REJECTED_BY_RISK", "reason": result.risk.reason}), 200
 
+    AUDIT_LOGGER.log_event(
+        component="api",
+        event_type="proposal_created",
+        severity="info",
+        message=f"Proposal created for {ticker}",
+        payload={
+            "proposal_id": result.proposal.proposal_id,
+            "ticker": result.proposal.ticker,
+            "side": result.proposal.side,
+            "contracts": result.proposal.contracts,
+        },
+    )
     return jsonify(
         {
             "status": "PENDING_APPROVAL",
@@ -309,6 +384,13 @@ def self_review():
     from Phase_A.analysis import _ENGINE
 
     applied = _ENGINE.risk_gateway.run_self_review()
+    PHASE_H_ALERTING.evaluate_drawdown(
+        DrawdownSnapshot(
+            daily_loss=_ENGINE.risk_gateway.tracker.daily_loss,
+            weekly_loss=_ENGINE.risk_gateway.tracker.weekly_loss,
+            buying_power=_ENGINE.risk_gateway.tracker.buying_power,
+        )
+    )
 
     return jsonify(
         {
@@ -353,6 +435,29 @@ def _require_ios_token():
     if provided != expected:
         return jsonify({"error": "Unauthorized dashboard token."}), 401
     return None
+
+
+@app.errorhandler(Exception)
+def handle_unhandled_exception(exc: Exception):
+    """Global error handler with structured audit + alerting."""
+    if isinstance(exc, HTTPException):
+        return exc
+
+    message = str(exc)
+    PHASE_H_DEPLOYMENT.record_error(message)
+    AUDIT_LOGGER.log_event(
+        component="api",
+        event_type="unhandled_exception",
+        severity="critical",
+        message=message,
+        payload={"path": request.path, "method": request.method},
+    )
+    PHASE_H_ALERTING.alerting.send_alert(
+        title="KalshiGuard API exception",
+        body=f"{request.method} {request.path}: {message}",
+        severity="critical",
+    )
+    return jsonify({"error": "internal_server_error", "message": "Unexpected server error."}), 500
 
 
 def _serialize_risk(risk) -> dict:

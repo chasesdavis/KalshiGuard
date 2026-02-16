@@ -16,7 +16,7 @@ Codex Cloud integration reads `CODEX_API_KEY` from environment — no secrets in
 | `Phase_E/` | **Live Trading** — Human-approved order execution via iMessage (mandatory until $200+) | 🔜 Stub |
 | `Phase_F/` | **Learning & Self-Improvement** — Offline model retraining, governance, versioned rollback | ✅ Implemented (offline) |
 | `Phase_G/` | **iOS Companion App** — SwiftUI dashboard, WidgetKit, live PnL, glassmorphism UI | ✅ Implemented |
-| `Phase_H/` | **Deployment & Monitoring** — Production hardening, 24/7 ops, alerting, audit logs | 🔜 Stub |
+| `Phase_H/` | **Deployment & Monitoring** — Production hardening, 24/7 ops, alerting, audit logs | ✅ Implemented |
 | `Shared/` | **Common utilities** — Models, config, Codex client, env loading | ✅ Scaffolded |
 | `scripts/` | **Helpers** — Setup, Flask launcher, dashboard check, merge-conflict helper | ✅ Scaffolded |
 
@@ -27,6 +27,7 @@ cd KalshiGuard
 pip install -r requirements.txt
 cp .env.example .env          # add your keys here (never commit .env)
 python Phase_A/api.py         # start API on :5000 (Phase D paper simulation enabled)
+# health check:                curl http://localhost:5000/health
 ```
 
 ## Environment Variables
@@ -39,6 +40,11 @@ python Phase_A/api.py         # start API on :5000 (Phase D paper simulation ena
 | `KALSHI_API_KEY` | Phase E+ | Kalshi API authentication |
 | `KALSHI_API_SECRET` | Phase E+ | Kalshi API secret |
 | `IOS_DASHBOARD_TOKEN` | Phase G | Token auth between iOS dashboard/widget and Flask API |
+| `AUDIT_DB_PATH` | Phase H | SQLite path for structured audit events |
+| `ALERT_CHANNELS` | Phase H | Alert fanout channels (`imessage,telegram`) |
+| `TELEGRAM_BOT_TOKEN` | Optional (Phase H) | Telegram Bot API token for alerts |
+| `TELEGRAM_CHAT_ID` | Optional (Phase H) | Telegram chat destination for alerts |
+| `HEALTH_ERROR_STREAK_RESTART` | Phase H | Error streak threshold before restart recommendation |
 
 ## Rules (Non-Negotiable)
 
