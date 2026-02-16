@@ -18,6 +18,11 @@ class BankrollTracker:
     open_exposure: float = 0.0
     daily_loss: float = 0.0
     weekly_loss: float = 0.0
+    max_drawdown_pct: float = 0.0
+    _peak_bankroll: float = 0.0
+
+    def __post_init__(self) -> None:
+        self._peak_bankroll = self.current_bankroll
 
     @property
     def current_bankroll(self) -> float:
@@ -46,3 +51,33 @@ class BankrollTracker:
     @property
     def exposure_capacity(self) -> float:
         return round(max(Config.MAX_TOTAL_EXPOSURE - self.open_exposure, 0.0), 4)
+
+    @property
+    def daily_pnl(self) -> float:
+        """Backward-compatible pnl view used by older risk tests."""
+        return -self.daily_loss
+
+    @daily_pnl.setter
+    def daily_pnl(self, value: float) -> None:
+        self.daily_loss = max(-value, 0.0)
+
+    @property
+    def weekly_pnl(self) -> float:
+        return -self.weekly_loss
+
+    @weekly_pnl.setter
+    def weekly_pnl(self, value: float) -> None:
+        self.weekly_loss = max(-value, 0.0)
+
+    def apply_pnl(self, pnl_dollars: float) -> None:
+        """Apply realized PnL and update drawdown metrics."""
+        self.realized_pnl = round(self.realized_pnl + pnl_dollars, 4)
+        if pnl_dollars < 0:
+            self.daily_loss = round(self.daily_loss + abs(pnl_dollars), 4)
+            self.weekly_loss = round(self.weekly_loss + abs(pnl_dollars), 4)
+
+        current = self.current_bankroll
+        self._peak_bankroll = max(self._peak_bankroll, current)
+        if self._peak_bankroll > 0:
+            drawdown = max((self._peak_bankroll - current) / self._peak_bankroll * 100.0, 0.0)
+            self.max_drawdown_pct = round(max(self.max_drawdown_pct, drawdown), 4)

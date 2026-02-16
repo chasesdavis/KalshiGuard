@@ -12,12 +12,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from Phase_A.analysis import analyze_snapshot_with_context, propose_trade_with_context
 from Phase_A.data_fetcher import fetch_markets, fetch_price_snapshots
 from Phase_A.logger import init_db, log_signal
+from Phase_C.imessage_proposal import REGISTRY
+from Phase_D.backtest_harness import BacktestHarness
 from Phase_F.model_retrainer import PhaseFModelRetrainer
 from Phase_F.version_rollback import VersionRollbackManager
 from Shared.config import Config
-from Shared.models import PriceSnapshot
 from Shared.logging_utils import configure_logging
-from Shared.order_executor import OrderExecutor
+from Shared.order_executor import OrderExecutor, OrderRequest
 
 configure_logging()
 app = Flask(__name__)
@@ -82,6 +83,7 @@ def explain_trade(ticker: str):
             "confirmation_count": result.edge_decision.confirmation_count,
             "risk_checks": result.edge_decision.threshold_checks,
             "risk_assessment": _serialize_risk(result.risk_assessment),
+            "paper_trade_proposal": result.paper_trade_proposal.__dict__,
             "proposal_preview": result.proposal_preview,
             "action": "NO ACTION (Phase F learning active; live execution controls unchanged)",
         }
@@ -98,6 +100,26 @@ def risk_assessment(ticker: str):
 
     result = analyze_snapshot_with_context(snap)
     return jsonify({"ticker": ticker, "risk_assessment": _serialize_risk(result.risk_assessment), "read_only": True})
+
+
+@app.route("/paper_trade_sim/<ticker>")
+def paper_trade_sim(ticker: str):
+    """Run a single proposal preview plus 100-trade deterministic backtest summary."""
+    snapshots = {s.ticker: s for s in fetch_price_snapshots()}
+    snap = snapshots.get(ticker)
+    if not snap:
+        return jsonify({"error": f"No data for ticker: {ticker}"}), 404
+
+    result = analyze_snapshot_with_context(snap)
+    backtest = BacktestHarness().run(trades=100)
+    return jsonify(
+        {
+            "ticker": ticker,
+            "proposal": result.paper_trade_proposal.__dict__,
+            "backtest_100_trade_summary": backtest.__dict__,
+            "read_only": True,
+        }
+    )
 
 
 @app.route("/ios/dashboard")
@@ -159,29 +181,101 @@ def ios_dashboard():
 
 @app.route("/execute_approved", methods=["POST"])
 def execute_approved():
-    """Phase G-safe approval endpoint stub.
+    """Execute only after approval.
 
-    This route is intentionally non-executing for capital preservation.
-    The iOS app can call it for UX testing, but no real order will be sent.
+    Supports both:
+    - Legacy Phase G stub payload (`approval_id`, `approved`)
+    - Phase E approval-gated payload (`proposal_id`)
     """
-    token_error = _require_ios_token()
-    if token_error:
-        return token_error
-
     body = request.get_json(silent=True) or {}
-    approval_id = body.get("approval_id", "")
-    approved = bool(body.get("approved", False))
 
+    legacy_mode = ("approval_id" in body) or ("approved" in body)
+    if legacy_mode:
+        token_error = _require_ios_token()
+        if token_error:
+            return token_error
+
+        approval_id = body.get("approval_id", "")
+        approved = bool(body.get("approved", False))
+        if not approved:
+            return (
+                jsonify(
+                    {
+                        "status": "DECLINED",
+                        "message": "No execution attempted (approval flag false).",
+                        "read_only": True,
+                    }
+                ),
+                400,
+            )
+        return jsonify(
+            {
+                "status": "STUBBED",
+                "approval_id": approval_id,
+                "message": "Approval acknowledged by API stub. Live order execution remains disabled in this workspace.",
+                "read_only": True,
+                "executed": False,
+            }
+        )
+
+    if "from_number" in body or "message" in body:
+        return jsonify({"error": "Inbound approval message fields are not accepted on this endpoint."}), 400
+
+    proposal_id = str(body.get("proposal_id", "")).strip().upper()
+    if not proposal_id:
+        return jsonify({"error": "proposal_id is required"}), 400
+
+    proposal = REGISTRY.get(proposal_id)
+    if proposal is None:
+        return jsonify({"error": "Unknown proposal_id"}), 404
+    if proposal.status != "PENDING_APPROVAL":
+        payload = {"status": proposal.status, "proposal_id": proposal_id}
+        if proposal.status == "EXECUTED":
+            payload["error"] = "Proposal already executed"
+        return jsonify(payload), 409
+
+    approved = REGISTRY.sender.wait_for_trade_approval(proposal_id)
     if not approved:
-        return jsonify({"status": "DECLINED", "message": "No execution attempted (approval flag false).", "read_only": True}), 400
+        return jsonify({"status": "WAITING_FOR_APPROVAL", "proposal_id": proposal_id}), 202
+
+    request_obj = OrderRequest(
+        ticker=proposal.ticker,
+        side="yes" if proposal.side == "YES" else "no",
+        contracts=proposal.contracts,
+        order_type="market",
+        client_order_id=proposal.proposal_id,
+    )
+    result = ORDER_EXECUTOR.place_order(request_obj)
+    REGISTRY.mark(proposal_id, "EXECUTED")
 
     return jsonify(
         {
-            "status": "STUBBED",
-            "approval_id": approval_id,
-            "message": "Approval acknowledged by API stub. Live order execution remains disabled in this workspace.",
-            "read_only": True,
-            "executed": False,
+            "status": "EXECUTED",
+            "proposal_id": proposal_id,
+            "order_id": result.order_id,
+            "order_status": result.status,
+        }
+    )
+
+
+@app.route("/propose_trade/<ticker>", methods=["POST"])
+def propose_trade(ticker: str):
+    snapshots = {s.ticker: s for s in fetch_price_snapshots()}
+    snap = snapshots.get(ticker)
+    if not snap:
+        return jsonify({"error": f"No data for ticker: {ticker}"}), 404
+
+    result = propose_trade_with_context(snap)
+    if result.proposal is None:
+        return jsonify({"status": "REJECTED_BY_RISK", "reason": result.risk.reason}), 200
+
+    return jsonify(
+        {
+            "status": "PENDING_APPROVAL",
+            "proposal_id": result.proposal.proposal_id,
+            "ticker": result.proposal.ticker,
+            "side": result.proposal.side,
+            "contracts": result.proposal.contracts,
         }
     )
 

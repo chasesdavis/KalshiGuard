@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from Phase_B.edge_detector import EdgeDecision, EdgeDetector
 from Phase_B.external_data import ExternalDataProvider
 from Phase_B.probability_engine import ProbabilityEngine, ProbabilityEstimate
-from Phase_C.imessage_proposal import log_trade_proposal
-from Phase_C.risk_gateway import RiskAssessment, RiskGateway
+from Phase_C.imessage_proposal import REGISTRY, TradeProposal, log_trade_proposal
+from Phase_C.risk_gateway import RiskAssessment, RiskDecision, RiskGateway
 from Shared.models import EVSignal, PriceSnapshot
 
 
@@ -34,6 +34,7 @@ class AnalysisResult:
     edge_decision: EdgeDecision
     external_payload: dict
     risk_assessment: RiskAssessment
+    paper_trade_proposal: PaperTradeProposal
     proposal_preview: str
 
 
@@ -61,7 +62,27 @@ class PhaseBAnalysisEngine:
         estimate = self.probability_engine.estimate_yes_probability(snapshot, anchors)
         confidence = self.probability_engine.aggregate_confidence(estimate, anchors)
         decision = self.edge_detector.evaluate(snapshot, estimate, confidence)
-        risk_assessment = self.risk_gateway.assess(snapshot, decision.side, estimate.ensemble_yes)
+        risk_assessment = self.risk_gateway.assess_snapshot(snapshot, decision.side, estimate.ensemble_yes)
+        paper_side, generation_mode = self._select_paper_side(decision, estimate)
+        entry_price = snapshot.yes_ask if paper_side == "YES" else snapshot.no_ask
+        adjusted_probability = estimate.ensemble_yes if paper_side == "YES" else (1 - estimate.ensemble_yes)
+        risk_decision = self.risk_gateway.assess_trade(
+            bankroll_tracker=self.risk_gateway.tracker,
+            probability_yes=adjusted_probability,
+            entry_price_cents=entry_price,
+            active_exposure=self.risk_gateway.tracker.open_exposure,
+            trials=1000,
+        )
+        paper_trade_proposal = PaperTradeProposal(
+            ticker=snapshot.ticker,
+            side=paper_side,
+            entry_price_cents=entry_price,
+            probability_yes=adjusted_probability,
+            approved_by_risk=risk_decision.approved,
+            proposed_stake=risk_decision.proposed_stake,
+            risk_reasons=risk_decision.fail_safe_reasons,
+            generation_mode=generation_mode,
+        )
         explanation = self._build_explanation(snapshot, estimate, decision, external_payload, risk_assessment)
 
         signal = EVSignal(
@@ -78,6 +99,7 @@ class PhaseBAnalysisEngine:
             edge_decision=decision,
             external_payload=external_payload,
             risk_assessment=risk_assessment,
+            paper_trade_proposal=paper_trade_proposal,
             proposal_preview="",
         )
         proposal_preview = log_trade_proposal(final_result, risk_assessment)
@@ -87,6 +109,7 @@ class PhaseBAnalysisEngine:
             edge_decision=decision,
             external_payload=external_payload,
             risk_assessment=risk_assessment,
+            paper_trade_proposal=paper_trade_proposal,
             proposal_preview=proposal_preview,
         )
 
