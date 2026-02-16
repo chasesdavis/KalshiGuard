@@ -37,6 +37,15 @@ class AnalysisResult:
     proposal_preview: str
 
 
+@dataclass(frozen=True)
+class ProposalResult:
+    """Composite payload for live proposal flow."""
+
+    analysis: AnalysisResult
+    risk: RiskDecision
+    proposal: TradeProposal | None
+
+
 class PhaseBAnalysisEngine:
     """High-level engine that computes edge and explanation for one market snapshot."""
 
@@ -80,6 +89,13 @@ class PhaseBAnalysisEngine:
             risk_assessment=risk_assessment,
             proposal_preview=proposal_preview,
         )
+
+    def propose_trade(self, snapshot: PriceSnapshot) -> ProposalResult:
+        """Analyze, risk-check, and (if approved by risk) send human approval proposal."""
+        analysis = self.analyze_snapshot(snapshot)
+        risk = self.risk_gateway.assess(analysis.signal, snapshot)
+        proposal = REGISTRY.create_and_send(analysis.signal, snapshot, risk) if risk.approved else None
+        return ProposalResult(analysis=analysis, risk=risk, proposal=proposal)
 
     @staticmethod
     def _select_paper_side(decision: EdgeDecision, estimate: ProbabilityEstimate) -> tuple[str, str]:

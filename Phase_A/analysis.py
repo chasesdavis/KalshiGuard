@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from Phase_B.analysis_engine import AnalysisResult, PhaseBAnalysisEngine
+from Phase_B.analysis_engine import AnalysisResult, PhaseBAnalysisEngine, ProposalResult
 from Shared.models import EVSignal, PriceSnapshot
 
 _ENGINE = PhaseBAnalysisEngine()
@@ -31,3 +31,8 @@ def compute_ev_for_signal(ticker: str, snapshot: PriceSnapshot) -> EVSignal:
 def analyze_snapshot_with_context(snapshot: PriceSnapshot) -> AnalysisResult:
     """Expose full Phase B context for structured API responses."""
     return _ENGINE.analyze_snapshot(snapshot)
+
+
+def propose_trade_with_context(snapshot: PriceSnapshot) -> ProposalResult:
+    """Create a human-approval trade proposal after Phase B + C checks."""
+    return _ENGINE.propose_trade(snapshot)

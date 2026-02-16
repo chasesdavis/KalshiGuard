@@ -9,7 +9,7 @@ from flask import Flask, jsonify, request
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from Phase_A.analysis import analyze_snapshot_with_context
+from Phase_A.analysis import analyze_snapshot_with_context, propose_trade_with_context
 from Phase_A.data_fetcher import fetch_markets, fetch_price_snapshots
 from Phase_A.logger import init_db, log_signal
 from Phase_F.model_retrainer import PhaseFModelRetrainer
@@ -17,10 +17,12 @@ from Phase_F.version_rollback import VersionRollbackManager
 from Shared.config import Config
 from Shared.models import PriceSnapshot
 from Shared.logging_utils import configure_logging
+from Shared.order_executor import OrderExecutor
 
 configure_logging()
 app = Flask(__name__)
 init_db()
+ORDER_EXECUTOR = OrderExecutor()
 
 MODEL_RETRAINER = PhaseFModelRetrainer()
 ROLLBACK_MANAGER = VersionRollbackManager()

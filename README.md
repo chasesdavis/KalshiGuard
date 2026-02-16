@@ -43,7 +43,7 @@ python Phase_A/api.py         # start API on :5000 (Phase D paper simulation ena
 ## Rules (Non-Negotiable)
 
 1. **Capital preservation > profit.** Every cent of the $50 is sacred.
-2. **No live trades without iMessage approval** from whitelisted number.
+2. **No live trades without iMessage approval** from whitelisted number (+17657921945) on every trade.
 3. **No secrets in code.** Environment variables only.
 4. **Read-only first.** Each phase unlocks incrementally after validation.
 
