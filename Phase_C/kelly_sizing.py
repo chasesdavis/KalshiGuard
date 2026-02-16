@@ -1,4 +1,4 @@
-"""Fractional Kelly sizing for KalshiGuard risk-managed entries."""
+"""Fractional Kelly micro-sizing for Kalshi binary contracts."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,27 +7,59 @@ from Shared.config import Config
 
 
 @dataclass(frozen=True)
-class KellyResult:
-    kelly_fraction: float
-    recommended_stake: float
+class PositionSizeDecision:
+    side: str
+    recommended_risk: float
+    kelly_fraction_raw: float
+    kelly_fraction_applied: float
+    max_risk_cap: float
+    exposure_cap_remaining: float
+    rationale: list[str]
 
 
-class KellySizer:
-    """Compute conservative position size with hard-dollar cap constraints."""
+class FractionalKellySizer:
+    """Computes conservative position risk in dollars for a single trade."""
 
-    def size_position(self, bankroll: float, probability_yes: float, entry_price_cents: float) -> KellyResult:
-        """Return fractional Kelly sizing clipped to strict risk caps.
+    def size_risk(
+        self,
+        *,
+        side: str,
+        prob_yes: float,
+        bankroll: float,
+        kelly_multiplier: float,
+        exposure_cap_remaining: float,
+    ) -> PositionSizeDecision:
+        """Return risk budget in dollars, bounded by strict hard caps."""
 
-        If inputs are invalid (non-positive bankroll or out-of-range entry), stake is zero.
-        """
-        if bankroll <= 0 or entry_price_cents <= 0 or entry_price_cents >= 100:
-            return KellyResult(kelly_fraction=0.0, recommended_stake=0.0)
+        if side not in {"YES", "NO"}:
+            return PositionSizeDecision(side, 0.0, 0.0, 0.0, Config.MAX_TRADE_RISK, exposure_cap_remaining, ["hold_side"])
 
-        prob_yes = min(max(probability_yes, 0.0), 1.0)
-        b = (100 - entry_price_cents) / entry_price_cents
-        q = 1 - prob_yes
-        raw_fraction = ((b * prob_yes) - q) / b
+        p_win = prob_yes if side == "YES" else (1 - prob_yes)
+        p_win = min(max(p_win, 0.0), 1.0)
 
-        fraction = max(0.0, raw_fraction) * Config.KELLY_FRACTION
-        stake = min(bankroll * fraction, Config.MAX_TRADE_RISK)
-        return KellyResult(kelly_fraction=round(fraction, 6), recommended_stake=round(max(0.0, stake), 4))
+        # Binary contract approximation with conservative fixed b=1.
+        q = 1 - p_win
+        kelly_raw = max((p_win - q), 0.0)
+        kelly_applied = kelly_raw * kelly_multiplier
+
+        uncapped_risk = bankroll * kelly_applied
+        cap = min(Config.MAX_TRADE_RISK, exposure_cap_remaining)
+        recommended = round(max(min(uncapped_risk, cap), 0.0), 4)
+
+        rationale = [
+            f"kelly_multiplier={kelly_multiplier:.2f}x",
+            f"p_win={p_win:.4f}",
+            f"kelly_raw={kelly_raw:.4f}",
+            f"uncapped_risk=${uncapped_risk:.4f}",
+            f"hard_cap=${cap:.2f}",
+        ]
+
+        return PositionSizeDecision(
+            side=side,
+            recommended_risk=recommended,
+            kelly_fraction_raw=round(kelly_raw, 6),
+            kelly_fraction_applied=round(kelly_applied, 6),
+            max_risk_cap=Config.MAX_TRADE_RISK,
+            exposure_cap_remaining=exposure_cap_remaining,
+            rationale=rationale,
+        )

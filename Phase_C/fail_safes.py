@@ -1,37 +1,39 @@
-"""Fail-safe checks to preserve the $50 bankroll during paper/live gating."""
+"""Fail-safe checks that can veto a proposed trade."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from Shared.config import Config
-from Shared.bankroll_tracker import BankrollTracker
+from Shared.models import PriceSnapshot
 
 
 @dataclass(frozen=True)
-class FailSafeResult:
-    allowed: bool
+class FailSafeReport:
+    approved: bool
+    checks: dict[str, bool]
     reasons: list[str]
 
 
-class FailSafeGate:
-    """Enforce pre-trade hard caps and drawdown kill switches."""
+class FailSafeEvaluator:
+    """Evaluate drawdown, liquidity, and buying power constraints."""
 
-    def evaluate(self, tracker: BankrollTracker, proposed_stake: float, active_exposure: float = 0.0) -> FailSafeResult:
-        reasons: list[str] = []
+    def evaluate(
+        self,
+        *,
+        snapshot: PriceSnapshot,
+        buying_power: float,
+        daily_loss: float,
+        weekly_loss: float,
+    ) -> FailSafeReport:
+        spread = max(snapshot.yes_ask - snapshot.yes_bid, snapshot.no_ask - snapshot.no_bid)
 
-        if tracker.current_bankroll <= 0:
-            reasons.append("bankroll_depleted")
-        if proposed_stake <= 0:
-            reasons.append("non_positive_stake")
-        if proposed_stake > Config.MAX_TRADE_RISK:
-            reasons.append("exceeds_max_trade_risk")
-        if active_exposure + proposed_stake > Config.MAX_TOTAL_EXPOSURE:
-            reasons.append("exceeds_total_exposure")
-        if proposed_stake > tracker.current_bankroll:
-            reasons.append("stake_exceeds_bankroll")
-        if tracker.daily_pnl <= -Config.DRAWDOWN_DAILY_LIMIT:
-            reasons.append("daily_drawdown_limit_hit")
-        if tracker.weekly_pnl <= -Config.DRAWDOWN_WEEKLY_LIMIT:
-            reasons.append("weekly_drawdown_limit_hit")
-
-        return FailSafeResult(allowed=not reasons, reasons=reasons)
+        checks = {
+            "buying_power_floor": buying_power >= Config.MIN_BUYING_POWER,
+            "daily_drawdown": daily_loss <= Config.DRAWDOWN_DAILY_LIMIT,
+            "weekly_drawdown": weekly_loss <= Config.DRAWDOWN_WEEKLY_LIMIT,
+            "liquidity_volume": snapshot.volume >= 1000,
+            "liquidity_spread": spread <= 8,
+        }
+        approved = all(checks.values())
+        reasons = [k for k, ok in checks.items() if not ok]
+        return FailSafeReport(approved=approved, checks=checks, reasons=reasons)

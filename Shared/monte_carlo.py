@@ -1,53 +1,65 @@
-"""Generic Monte Carlo helpers shared across risk and simulation modules."""
+"""Shared Monte Carlo helpers for bankroll stress testing."""
 from __future__ import annotations
 
-from dataclasses import dataclass
 import random
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
 class MonteCarloSummary:
     ruin_probability: float
-    average_pnl: float
-    percentile_05_pnl: float
-    percentile_95_pnl: float
+    p5_terminal: float
+    p50_terminal: float
+    p95_terminal: float
 
 
-def simulate_binary_contract(
-    trials: int,
-    probability_yes: float,
-    stake_dollars: float,
-    entry_price_cents: float,
-    starting_bankroll: float = 50.0,
+def simulate_bankroll_paths(
+    *,
+    initial_bankroll: float,
+    risk_fraction: float,
+    win_probability: float,
+    payout_multiple: float,
+    simulations: int = 1000,
+    steps: int = 25,
+    ruin_threshold: float = 40.0,
     seed: int = 7,
 ) -> MonteCarloSummary:
-    """Run binary payout simulations for a contract buying one side at entry price."""
-    if trials <= 0:
-        raise ValueError("trials must be > 0")
-    if stake_dollars <= 0 or entry_price_cents <= 0 or entry_price_cents >= 100:
-        return MonteCarloSummary(ruin_probability=1.0, average_pnl=0.0, percentile_05_pnl=0.0, percentile_95_pnl=0.0)
+    """Simulate repeated micro-trades and report tail risk statistics."""
 
     rng = random.Random(seed)
-    outcomes: list[float] = []
+    terminals: list[float] = []
+    ruins = 0
 
-    prob_yes = min(max(probability_yes, 0.0), 1.0)
-    contracts = stake_dollars / (entry_price_cents / 100.0)
-    per_contract_win = (100 - entry_price_cents) / 100.0
-    per_contract_loss = entry_price_cents / 100.0
+    bounded_win_prob = min(max(win_probability, 0.0), 1.0)
+    bounded_risk_fraction = max(risk_fraction, 0.0)
 
-    for _ in range(trials):
-        yes_occurs = rng.random() < prob_yes
-        pnl = contracts * per_contract_win if yes_occurs else -contracts * per_contract_loss
-        outcomes.append(round(pnl, 6))
+    for _ in range(simulations):
+        bankroll = initial_bankroll
+        for _ in range(steps):
+            stake = bankroll * bounded_risk_fraction
+            if stake <= 0:
+                continue
 
-    ordered = sorted(outcomes)
-    ruin = sum(1 for val in outcomes if (starting_bankroll + val) <= 0.0) / len(outcomes)
-    avg = sum(outcomes) / len(outcomes)
-    p05 = ordered[max(0, int(0.05 * len(ordered)) - 1)]
-    p95 = ordered[min(len(ordered) - 1, int(0.95 * len(ordered)) - 1)]
+            if rng.random() <= bounded_win_prob:
+                bankroll += stake * payout_multiple
+            else:
+                bankroll -= stake
+
+            if bankroll <= ruin_threshold:
+                ruins += 1
+                break
+
+        terminals.append(bankroll)
+
+    terminals.sort()
+
+    def percentile(pct: float) -> float:
+        index = int((len(terminals) - 1) * pct)
+        return terminals[index]
+
     return MonteCarloSummary(
-        ruin_probability=round(ruin, 6),
-        average_pnl=round(avg, 6),
-        percentile_05_pnl=round(p05, 6),
-        percentile_95_pnl=round(p95, 6),
+        ruin_probability=ruins / simulations if simulations else 1.0,
+        p5_terminal=percentile(0.05),
+        p50_terminal=percentile(0.50),
+        p95_terminal=percentile(0.95),
     )

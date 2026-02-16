@@ -1,73 +1,99 @@
-"""Unified Phase C risk gateway for trade and paper simulation checks."""
+"""Risk gateway that combines sizing, fail-safe checks, stress testing, and Phase F self-review."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from Phase_C.fail_safes import FailSafeGate
-from Phase_C.kelly_sizing import KellySizer
-from Phase_C.monte_carlo_stress import MonteCarloStressTester
+from Phase_C.fail_safes import FailSafeEvaluator, FailSafeReport
+from Phase_C.kelly_sizing import FractionalKellySizer, PositionSizeDecision
+from Phase_C.monte_carlo_stress import MonteCarloStressTester, StressTestReport
+from Phase_F.governance_engine import GovernanceEngine, GovernanceReport
 from Shared.bankroll_tracker import BankrollTracker
+from Shared.config import Config
+from Shared.models import PriceSnapshot
 
 
 @dataclass(frozen=True)
 class RiskAssessment:
+    ticker: str
+    side: str
+    bankroll: float
+    buying_power: float
+    sizing: PositionSizeDecision
+    fail_safe_report: FailSafeReport
+    stress_test: StressTestReport
     approved: bool
-    proposed_stake: float
-    kelly_fraction: float
-    fail_safe_reasons: list[str]
-    stress_passed: bool
-    ruin_probability: float
-    average_pnl: float
+    blockers: list[str]
 
 
 class RiskGateway:
-    """Primary risk orchestration entrypoint used by Phase B and D."""
+    """Central Phase C decisioning object for pre-trade risk assessment."""
 
-    def __init__(self) -> None:
-        self.kelly = KellySizer()
-        self.fail_safes = FailSafeGate()
-        self.stress = MonteCarloStressTester()
+    def __init__(self, tracker: BankrollTracker | None = None) -> None:
+        self.tracker = tracker or BankrollTracker()
+        self.sizer = FractionalKellySizer()
+        self.fail_safes = FailSafeEvaluator()
+        self.stress_tester = MonteCarloStressTester()
+        self.governance_engine = GovernanceEngine()
+        self.kelly_scale_factor = 1.0
 
-    def assess_trade(
-        self,
-        bankroll_tracker: BankrollTracker,
-        probability_yes: float,
-        entry_price_cents: float,
-        active_exposure: float = 0.0,
-        trials: int = 1000,
-    ) -> RiskAssessment:
-        kelly_result = self.kelly.size_position(bankroll_tracker.current_bankroll, probability_yes, entry_price_cents)
-        fail_safe = self.fail_safes.evaluate(bankroll_tracker, kelly_result.recommended_stake, active_exposure=active_exposure)
-
-        stress_result = self.stress.run(
-            probability_yes=probability_yes,
-            stake_dollars=kelly_result.recommended_stake,
-            entry_price_cents=entry_price_cents,
-            trials=trials,
-            starting_bankroll=bankroll_tracker.current_bankroll,
+    def assess(self, snapshot: PriceSnapshot, side: str, ensemble_yes: float) -> RiskAssessment:
+        fail_safe_report = self.fail_safes.evaluate(
+            snapshot=snapshot,
+            buying_power=self.tracker.buying_power,
+            daily_loss=self.tracker.daily_loss,
+            weekly_loss=self.tracker.weekly_loss,
         )
 
-        approved = fail_safe.allowed and stress_result.passed
+        effective_multiplier = self.tracker.kelly_multiplier * self.kelly_scale_factor
+        sizing = self.sizer.size_risk(
+            side=side,
+            prob_yes=ensemble_yes,
+            bankroll=self.tracker.current_bankroll,
+            kelly_multiplier=effective_multiplier,
+            exposure_cap_remaining=self.tracker.exposure_capacity,
+        )
+
+        p_win = ensemble_yes if side == "YES" else 1 - ensemble_yes
+        price = snapshot.yes_ask / 100.0 if side == "YES" else snapshot.no_ask / 100.0
+        payout_multiple = 0.0 if price <= 0 else (1 - price) / price
+
+        stress = self.stress_tester.run(
+            bankroll=self.tracker.current_bankroll,
+            risk_amount=sizing.recommended_risk,
+            win_probability=p_win,
+            payout_multiple=payout_multiple,
+            simulations=Config.MONTE_CARLO_SIMS,
+        )
+
+        blockers: list[str] = []
+        if side == "HOLD":
+            blockers.append("no_trade_signal")
+        if sizing.recommended_risk <= 0:
+            blockers.append("zero_position_size")
+        if not fail_safe_report.approved:
+            blockers.extend(fail_safe_report.reasons)
+        if not stress.pass_threshold:
+            blockers.append("stress_test_ruin_probability")
+
+        approved = len(blockers) == 0
+
         return RiskAssessment(
+            ticker=snapshot.ticker,
+            side=side,
+            bankroll=self.tracker.current_bankroll,
+            buying_power=self.tracker.buying_power,
+            sizing=sizing,
+            fail_safe_report=fail_safe_report,
+            stress_test=stress,
             approved=approved,
-            proposed_stake=kelly_result.recommended_stake,
-            kelly_fraction=kelly_result.kelly_fraction,
-            fail_safe_reasons=fail_safe.reasons,
-            stress_passed=stress_result.passed,
-            ruin_probability=stress_result.summary.ruin_probability,
-            average_pnl=stress_result.summary.average_pnl,
+            blockers=blockers,
         )
 
-    def assess_paper_simulation(
-        self,
-        bankroll_tracker: BankrollTracker,
-        probability_yes: float,
-        entry_price_cents: float,
-    ) -> RiskAssessment:
-        """Convenience alias with lower trial count for route-level responsiveness."""
-        return self.assess_trade(
-            bankroll_tracker=bankroll_tracker,
-            probability_yes=probability_yes,
-            entry_price_cents=entry_price_cents,
-            trials=500,
+    def run_self_review(self) -> GovernanceReport:
+        """Apply governance policy and update Kelly scaling in-memory."""
+        report = self.governance_engine.run_self_review(
+            daily_loss=self.tracker.daily_loss,
+            weekly_loss=self.tracker.weekly_loss,
         )
+        self.kelly_scale_factor = report.adjustment.kelly_scale_factor
+        return report

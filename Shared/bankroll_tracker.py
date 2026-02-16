@@ -1,41 +1,48 @@
-"""Bankroll tracking utilities for simulation and risk enforcement."""
+"""Bankroll state utilities for micro-bankroll risk controls.
+
+Phase C keeps this tracker read-only for proposal calculations.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from Shared.config import Config
+
 
 @dataclass
 class BankrollTracker:
-    """Tracks current bankroll and historical equity curve for drawdown checks."""
+    """Tracks bankroll, buying power, and drawdown-relevant metrics."""
 
-    starting_bankroll: float = 50.0
-
-    def __post_init__(self) -> None:
-        self.current_bankroll = float(self.starting_bankroll)
-        self.peak_bankroll = float(self.starting_bankroll)
-        self.daily_pnl = 0.0
-        self.weekly_pnl = 0.0
-        self.trade_count = 0
-
-    def apply_pnl(self, pnl_dollars: float) -> None:
-        self.current_bankroll = round(max(0.0, self.current_bankroll + pnl_dollars), 4)
-        self.peak_bankroll = max(self.peak_bankroll, self.current_bankroll)
-        self.daily_pnl = round(self.daily_pnl + pnl_dollars, 4)
-        self.weekly_pnl = round(self.weekly_pnl + pnl_dollars, 4)
-        self.trade_count += 1
-
-    def reset_daily(self) -> None:
-        self.daily_pnl = 0.0
-
-    def reset_weekly(self) -> None:
-        self.weekly_pnl = 0.0
+    starting_bankroll: float = Config.BANKROLL_START
+    realized_pnl: float = 0.0
+    open_exposure: float = 0.0
+    daily_loss: float = 0.0
+    weekly_loss: float = 0.0
 
     @property
-    def max_drawdown_abs(self) -> float:
-        return round(max(0.0, self.peak_bankroll - self.current_bankroll), 4)
+    def current_bankroll(self) -> float:
+        return round(self.starting_bankroll + self.realized_pnl, 4)
 
     @property
-    def max_drawdown_pct(self) -> float:
-        if self.peak_bankroll <= 0:
-            return 0.0
-        return round((self.max_drawdown_abs / self.peak_bankroll) * 100, 4)
+    def buying_power(self) -> float:
+        return round(max(self.current_bankroll - self.open_exposure, 0.0), 4)
+
+    @property
+    def growth_ratio(self) -> float:
+        if self.starting_bankroll <= 0:
+            return 1.0
+        return self.current_bankroll / self.starting_bankroll
+
+    @property
+    def kelly_multiplier(self) -> float:
+        """Dynamic scaling from 0.10x to 0.25x after +20% growth.
+
+        Before +20% growth: capped at 0.10x.
+        At/above +20% growth: 0.25x.
+        """
+
+        return Config.KELLY_GROWTH_MULTIPLIER if self.growth_ratio >= Config.GROWTH_UNLOCK_RATIO else Config.KELLY_BASE_MULTIPLIER
+
+    @property
+    def exposure_capacity(self) -> float:
+        return round(max(Config.MAX_TOTAL_EXPOSURE - self.open_exposure, 0.0), 4)

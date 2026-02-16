@@ -1,4 +1,4 @@
-"""Phase B orchestration for explainable EV analysis and paper-trade proposals."""
+"""Phase B orchestration for explainable EV analysis with Phase C risk context."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from Phase_B.edge_detector import EdgeDecision, EdgeDetector
 from Phase_B.external_data import ExternalDataProvider
 from Phase_B.probability_engine import ProbabilityEngine, ProbabilityEstimate
+from Phase_C.imessage_proposal import log_trade_proposal
 from Phase_C.risk_gateway import RiskAssessment, RiskGateway
-from Shared.bankroll_tracker import BankrollTracker
 from Shared.models import EVSignal, PriceSnapshot
 
 
@@ -27,15 +27,14 @@ class PaperTradeProposal:
 
 @dataclass(frozen=True)
 class AnalysisResult:
-    """Full Phase B analysis payload for API and logging."""
+    """Full analysis payload for API and logging."""
 
     signal: EVSignal
     probability_estimate: ProbabilityEstimate
     edge_decision: EdgeDecision
     external_payload: dict
-    snapshot: PriceSnapshot
     risk_assessment: RiskAssessment
-    paper_trade_proposal: PaperTradeProposal
+    proposal_preview: str
 
 
 class PhaseBAnalysisEngine:
@@ -53,29 +52,9 @@ class PhaseBAnalysisEngine:
         estimate = self.probability_engine.estimate_yes_probability(snapshot, anchors)
         confidence = self.probability_engine.aggregate_confidence(estimate, anchors)
         decision = self.edge_detector.evaluate(snapshot, estimate, confidence)
+        risk_assessment = self.risk_gateway.assess(snapshot, decision.side, estimate.ensemble_yes)
+        explanation = self._build_explanation(snapshot, estimate, decision, external_payload, risk_assessment)
 
-        proposal_side, mode = self._select_paper_side(decision, estimate)
-        proposal_entry = snapshot.yes_ask if proposal_side == "YES" else snapshot.no_ask
-        proposal_probability_yes = estimate.ensemble_yes if proposal_side == "YES" else (1 - estimate.ensemble_yes)
-
-        risk_assessment = self.risk_gateway.assess_trade(
-            bankroll_tracker=BankrollTracker(starting_bankroll=50.0),
-            probability_yes=proposal_probability_yes,
-            entry_price_cents=proposal_entry,
-        )
-
-        proposal = PaperTradeProposal(
-            ticker=snapshot.ticker,
-            side=proposal_side,
-            entry_price_cents=proposal_entry,
-            probability_yes=round(estimate.ensemble_yes, 4),
-            approved_by_risk=risk_assessment.approved,
-            proposed_stake=risk_assessment.proposed_stake,
-            risk_reasons=risk_assessment.fail_safe_reasons,
-            generation_mode=mode,
-        )
-
-        explanation = self._build_explanation(snapshot, estimate, decision, external_payload, risk_assessment, proposal)
         signal = EVSignal(
             ticker=snapshot.ticker,
             ev_percent=round(decision.ev_percent, 2),
@@ -84,14 +63,22 @@ class PhaseBAnalysisEngine:
             data_sources=[s["name"] for s in external_payload["sources"]],
             side=decision.side,
         )
+        final_result = AnalysisResult(
+            signal=signal,
+            probability_estimate=estimate,
+            edge_decision=decision,
+            external_payload=external_payload,
+            risk_assessment=risk_assessment,
+            proposal_preview="",
+        )
+        proposal_preview = log_trade_proposal(final_result, risk_assessment)
         return AnalysisResult(
             signal=signal,
             probability_estimate=estimate,
             edge_decision=decision,
             external_payload=external_payload,
-            snapshot=snapshot,
             risk_assessment=risk_assessment,
-            paper_trade_proposal=proposal,
+            proposal_preview=proposal_preview,
         )
 
     @staticmethod
@@ -114,11 +101,11 @@ class PhaseBAnalysisEngine:
         decision: EdgeDecision,
         external_payload: dict,
         risk_assessment: RiskAssessment,
-        proposal: PaperTradeProposal,
     ) -> str:
         source_names = ", ".join(s["name"] for s in external_payload["sources"])
+        stress = risk_assessment.stress_test
         return (
-            f"Phase B Analysis for {snapshot.ticker}\n"
+            f"Phase B+C Analysis for {snapshot.ticker}\n"
             f"- Market implied YES: {estimate.market_implied_yes:.1%}\n"
             f"- External consensus YES: {estimate.external_yes:.1%}\n"
             f"- Bayesian YES: {estimate.bayesian_yes:.1%}\n"
@@ -126,8 +113,11 @@ class PhaseBAnalysisEngine:
             f"- Ensemble YES: {estimate.ensemble_yes:.1%}\n"
             f"- Confirmations ({decision.confirmation_count}): {', '.join(decision.confirmations) or 'none'}\n"
             f"- Threshold checks: {decision.threshold_checks}\n"
-            f"- Live side gate: {decision.side} | EV: {decision.ev_percent:.2f}%\n"
-            f"- Paper side: {proposal.side} ({proposal.generation_mode}) @ {proposal.entry_price_cents:.2f}c\n"
-            f"- Risk approved: {risk_assessment.approved} | stake=${risk_assessment.proposed_stake:.2f} | ruin={risk_assessment.ruin_probability:.4f}\n"
+            f"- Side: {decision.side} | EV: {decision.ev_percent:.2f}%\n"
+            f"- Proposed risk: ${risk_assessment.sizing.recommended_risk:.2f} "
+            f"(Kelly={risk_assessment.sizing.kelly_fraction_applied:.4f})\n"
+            f"- Stress ruin probability: {stress.ruin_probability:.2%} (n={stress.simulations})\n"
+            f"- Fail-safe approved: {risk_assessment.fail_safe_report.approved} | "
+            f"Blockers: {', '.join(risk_assessment.blockers) or 'none'}\n"
             f"- Sources: {source_names}"
         )
