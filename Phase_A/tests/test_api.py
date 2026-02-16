@@ -12,8 +12,8 @@ def test_status():
     response = client.get("/status")
     assert response.status_code == 200
     data = response.get_json()
-    assert data["phase"].startswith("B")
-    assert data["live_trading"] is False
+    assert data["phase"].startswith("E")
+    assert data["live_trading"] is True
 
 
 def test_markets():

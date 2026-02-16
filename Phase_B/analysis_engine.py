@@ -1,4 +1,4 @@
-"""Phase B orchestration for explainable EV analysis."""
+"""Phase B orchestration for explainable EV analysis and Phase E proposals."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from Phase_B.edge_detector import EdgeDecision, EdgeDetector
 from Phase_B.external_data import ExternalDataProvider
 from Phase_B.probability_engine import ProbabilityEngine, ProbabilityEstimate
+from Phase_C.imessage_proposal import REGISTRY, TradeProposal
+from Phase_C.risk_gateway import RiskDecision, RiskGateway
 from Shared.models import EVSignal, PriceSnapshot
 
 
@@ -19,6 +21,15 @@ class AnalysisResult:
     external_payload: dict
 
 
+@dataclass(frozen=True)
+class ProposalResult:
+    """Composite payload for live proposal flow."""
+
+    analysis: AnalysisResult
+    risk: RiskDecision
+    proposal: TradeProposal | None
+
+
 class PhaseBAnalysisEngine:
     """High-level engine that computes edge and explanation for one market snapshot."""
 
@@ -26,6 +37,7 @@ class PhaseBAnalysisEngine:
         self.external_data = ExternalDataProvider()
         self.probability_engine = ProbabilityEngine()
         self.edge_detector = EdgeDetector()
+        self.risk_gateway = RiskGateway()
 
     def analyze_snapshot(self, snapshot: PriceSnapshot) -> AnalysisResult:
         anchors = self.external_data.get_probability_anchors(snapshot.ticker)
@@ -49,6 +61,13 @@ class PhaseBAnalysisEngine:
             edge_decision=decision,
             external_payload=external_payload,
         )
+
+    def propose_trade(self, snapshot: PriceSnapshot) -> ProposalResult:
+        """Analyze, risk-check, and (if approved by risk) send human approval proposal."""
+        analysis = self.analyze_snapshot(snapshot)
+        risk = self.risk_gateway.assess(analysis.signal, snapshot)
+        proposal = REGISTRY.create_and_send(analysis.signal, snapshot, risk) if risk.approved else None
+        return ProposalResult(analysis=analysis, risk=risk, proposal=proposal)
 
     @staticmethod
     def _build_explanation(
