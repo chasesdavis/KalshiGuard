@@ -15,6 +15,7 @@ from Shared.config import Config
 def _force_risk_approval(monkeypatch):
     monkeypatch.setattr(Config, "MIN_CONFIDENCE", 0.0)
     monkeypatch.setattr(Config, "MIN_EV_THRESHOLD", -100.0)
+    monkeypatch.setattr(Config, "APPROVAL_WAIT_TIMEOUT_SECONDS", 1)
     monkeypatch.setattr(
         RiskGateway,
         "assess",

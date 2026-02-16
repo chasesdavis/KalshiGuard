@@ -23,6 +23,14 @@ class Config:
     KALSHI_API_SECRET = os.getenv("KALSHI_API_SECRET")
     KALSHI_ENV = os.getenv("KALSHI_ENV", "DEMO")
 
+    # Approval wait loop
+    APPROVAL_WAIT_TIMEOUT_SECONDS = int(os.getenv("APPROVAL_WAIT_TIMEOUT_SECONDS", "60"))
+
+    # Optional Twilio transport for iMessage/SMS proposal delivery
+    TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+    TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+    TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER")
+
     # Bankroll constraints
     BANKROLL_START = 50.00
     MAX_TRADE_RISK = 0.50

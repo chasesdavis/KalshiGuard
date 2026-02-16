@@ -128,7 +128,11 @@ def execute_approved():
     if from_number and incoming_message:
         REGISTRY.sender.record_incoming_message(from_number=from_number, body=incoming_message)
 
-    approved = REGISTRY.sender.wait_for_trade_approval(proposal_id, timeout_seconds=3, poll_interval_seconds=0.1)
+    approved = REGISTRY.sender.wait_for_trade_approval(
+        proposal_id,
+        timeout_seconds=Config.APPROVAL_WAIT_TIMEOUT_SECONDS,
+        poll_interval_seconds=0.1,
+    )
     if not approved:
         return jsonify({"status": "WAITING_FOR_APPROVAL", "proposal_id": proposal_id}), 202
 

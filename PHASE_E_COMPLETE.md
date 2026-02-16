@@ -11,7 +11,8 @@
 ### 2) Human approval workflow (always required)
 - Added `Phase_E/imessage_sender.py`:
   - Enforces whitelist: `+17657921945` only.
-  - Captures outbound proposal messages.
+  - Sends via Twilio Messages API when `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_FROM_NUMBER` are configured.
+  - Falls back to queued local transport for dev/test.
   - Polls inbound messages for exact approval format:
     - `APPROVE TRADE ID <ID>`
   - Ignores non-whitelisted and malformed messages.
@@ -80,6 +81,7 @@ curl -X POST http://localhost:5000/execute_approved \
 
 ## Notes
 - This implementation intentionally keeps inbound iMessage ingestion abstract (`record_incoming_message`) so production can bind a secure webhook/bridge transport.
+- Approval wait timeout is configurable with `APPROVAL_WAIT_TIMEOUT_SECONDS`.
 - No secrets are stored in code; all credentials come from environment variables.
 - Approval is mandatory for all trades regardless of bankroll level.
 
