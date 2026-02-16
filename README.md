@@ -53,6 +53,13 @@ If PR branches are behind `main` and GitHub shows merge conflicts, run:
 ./scripts/resolve-pr-conflicts.sh <branch-1> <branch-2>
 ```
 
+You can also pass a PR number or GitHub PR URL directly:
+
+```bash
+./scripts/resolve-pr-conflicts.sh 4
+./scripts/resolve-pr-conflicts.sh https://github.com/chasesdavis/KalshiGuard/pull/4/conflicts
+```
+
 Or run with no arguments to auto-detect local unpushed PR branches (`codex/pr-*`):
 
 ```bash
