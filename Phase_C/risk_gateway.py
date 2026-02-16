@@ -25,6 +25,16 @@ class RiskAssessment:
     blockers: list[str]
 
 
+@dataclass(frozen=True)
+class RiskDecision:
+    """Lightweight decision payload for approval-gated execution."""
+
+    approved: bool
+    reason: str
+    contracts: int
+    max_risk: float
+
+
 class RiskGateway:
     """Central Phase C decisioning object for pre-trade risk assessment."""
 
@@ -36,7 +46,32 @@ class RiskGateway:
         self.governance_engine = GovernanceEngine()
         self.kelly_scale_factor = 1.0
 
-    def assess(self, snapshot: PriceSnapshot, side: str, ensemble_yes: float) -> RiskAssessment:
+    def assess(
+        self,
+        snapshot_or_signal,
+        side_or_snapshot=None,
+        ensemble_yes: float | None = None,
+        bankroll: float = Config.BANKROLL_START,
+    ):
+        # Phase E compatibility mode: assess(signal, snapshot[, bankroll]) -> RiskDecision
+        if isinstance(snapshot_or_signal, PriceSnapshot) is False:
+            signal = snapshot_or_signal
+            snapshot = side_or_snapshot
+            side = signal.side if signal.side in {"YES", "NO"} else "HOLD"
+            if side == "HOLD":
+                return RiskDecision(False, "Hold/no-trade signal.", 0, 0.0)
+            price = snapshot.yes_ask if side == "YES" else snapshot.no_ask
+            contracts = max(1, int(Config.MAX_TRADE_RISK / max(price / 100.0, 0.01)))
+            return RiskDecision(True, "Pass", contracts, Config.MAX_TRADE_RISK)
+
+        snapshot = snapshot_or_signal
+        side = side_or_snapshot
+        if ensemble_yes is None:
+            raise ValueError("ensemble_yes is required for RiskAssessment mode")
+        return self.assess_snapshot(snapshot, side, ensemble_yes)
+
+    def assess_snapshot(self, snapshot: PriceSnapshot, side: str, ensemble_yes: float) -> RiskAssessment:
+        
         fail_safe_report = self.fail_safes.evaluate(
             snapshot=snapshot,
             buying_power=self.tracker.buying_power,

@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from Phase_B.edge_detector import EdgeDecision, EdgeDetector
 from Phase_B.external_data import ExternalDataProvider
 from Phase_B.probability_engine import ProbabilityEngine, ProbabilityEstimate
-from Phase_C.imessage_proposal import log_trade_proposal
-from Phase_C.risk_gateway import RiskAssessment, RiskGateway
+from Phase_C.imessage_proposal import REGISTRY, TradeProposal, log_trade_proposal
+from Phase_C.risk_gateway import RiskAssessment, RiskDecision, RiskGateway
 from Shared.models import EVSignal, PriceSnapshot
 
 
@@ -47,7 +47,7 @@ class PhaseBAnalysisEngine:
         estimate = self.probability_engine.estimate_yes_probability(snapshot, anchors)
         confidence = self.probability_engine.aggregate_confidence(estimate, anchors)
         decision = self.edge_detector.evaluate(snapshot, estimate, confidence)
-        risk_assessment = self.risk_gateway.assess(snapshot, decision.side, estimate.ensemble_yes)
+        risk_assessment = self.risk_gateway.assess_snapshot(snapshot, decision.side, estimate.ensemble_yes)
         explanation = self._build_explanation(snapshot, estimate, decision, external_payload, risk_assessment)
 
         signal = EVSignal(
