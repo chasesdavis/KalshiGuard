@@ -12,6 +12,20 @@ from Shared.models import EVSignal, PriceSnapshot
 
 
 @dataclass(frozen=True)
+class PaperTradeProposal:
+    """Phase B output for Phase D paper-trading candidate."""
+
+    ticker: str
+    side: str
+    entry_price_cents: float
+    probability_yes: float
+    approved_by_risk: bool
+    proposed_stake: float
+    risk_reasons: list[str]
+    generation_mode: str
+
+
+@dataclass(frozen=True)
 class AnalysisResult:
     """Full analysis payload for API and logging."""
 
@@ -66,6 +80,19 @@ class PhaseBAnalysisEngine:
             risk_assessment=risk_assessment,
             proposal_preview=proposal_preview,
         )
+
+    @staticmethod
+    def _select_paper_side(decision: EdgeDecision, estimate: ProbabilityEstimate) -> tuple[str, str]:
+        """Select a simulation side.
+
+        In Phase D we still simulate HOLD candidates by using ensemble repricing direction,
+        while preserving strict Phase B live side gating in `edge_decision.side`.
+        """
+        if decision.side in {"YES", "NO"}:
+            return decision.side, "edge_confirmed"
+
+        repricing_side = "YES" if estimate.ensemble_yes >= estimate.market_implied_yes else "NO"
+        return repricing_side, "repricing_fallback"
 
     @staticmethod
     def _build_explanation(

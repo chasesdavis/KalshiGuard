@@ -15,6 +15,7 @@ from Phase_A.logger import init_db, log_signal
 from Phase_F.model_retrainer import PhaseFModelRetrainer
 from Phase_F.version_rollback import VersionRollbackManager
 from Shared.config import Config
+from Shared.models import PriceSnapshot
 from Shared.logging_utils import configure_logging
 
 configure_logging()

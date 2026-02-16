@@ -26,7 +26,7 @@ Codex Cloud integration reads `CODEX_API_KEY` from environment — no secrets in
 cd KalshiGuard
 pip install -r requirements.txt
 cp .env.example .env          # add your keys here (never commit .env)
-python Phase_A/api.py         # start read-only API on :5000 (Phase B analysis enabled)
+python Phase_A/api.py         # start API on :5000 (Phase D paper simulation enabled)
 ```
 
 ## Environment Variables
@@ -34,6 +34,8 @@ python Phase_A/api.py         # start read-only API on :5000 (Phase B analysis e
 | Var | Required | Purpose |
 |-----|----------|---------|
 | `CODEX_API_KEY` | Optional | Codex Cloud code-generation calls |
+| `DEMO_KALSHI_API_KEY` | Optional (Phase D) | Demo Kalshi API key for paper simulations |
+| `DEMO_KALSHI_API_SECRET` | Optional (Phase D) | Demo Kalshi API secret for paper simulations |
 | `KALSHI_API_KEY` | Phase E+ | Kalshi API authentication |
 | `KALSHI_API_SECRET` | Phase E+ | Kalshi API secret |
 | `IOS_DASHBOARD_TOKEN` | Phase G | Token auth between iOS dashboard/widget and Flask API |
